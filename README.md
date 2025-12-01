@@ -55,11 +55,15 @@ Este proyecto demuestra cómo crear una aplicación completa que se integra dire
 ```
 
 1. **Usuario pregunta** a ChatGPT: *"Check the accessibility of this image [adjuntar imagen]"*
-2. **ChatGPT llama** al servidor MCP usando JSON-RPC 2.0
-3. **Servidor responde** con datos estructurados + HTML del widget
-4. **ChatGPT renderiza** el widget React directamente en la conversación
-5. **Usuario interactúa** con el widget (revisa accesibilidad, etc.)
-6. **Widget se actualiza** dinámicamente cuando ChatGPT crea nuevas tareas
+2. **ChatGPT genera URL temporal** de la imagen subida
+3. **ChatGPT llama** al servidor MCP usando JSON-RPC 2.0 con `image_url`
+4. **Servidor descarga y analiza** la imagen desde la URL
+5. **Servidor responde** con datos estructurados + HTML del widget
+6. **ChatGPT renderiza** el widget React directamente en la conversación
+7. **Usuario interactúa** con el widget (revisa accesibilidad, etc.)
+
+> **⚠️ Nota Importante**: El servidor acepta **URLs de imágenes**, no base64. ChatGPT proporciona automáticamente URLs temporales cuando subes imágenes. Ver [FIX_IMAGE_ERROR.md](./FIX_IMAGE_ERROR.md) para más detalles.
+
 
 ---
 

@@ -84,23 +84,22 @@ async def mcp_endpoint(request: Request):
                 "tools": [
                     {
                         "name": "analyze_color_accessibility",
-                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements.",
+                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements. Provide the image URL when available.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "image_data": {
-                                    "type": "string",
-                                    "description": "Base64 encoded image data"
-                                },
                                 "image_url": {
                                     "type": "string",
-                                    "description": "URL of the image to analyze"
+                                    "description": "URL of the image to analyze (required)"
+                                },
+                                "wcag_level": {
+                                    "type": "string",
+                                    "enum": ["AA", "AAA"],
+                                    "description": "WCAG conformance level to check against (default: AA)",
+                                    "default": "AA"
                                 }
                             },
-                            "oneOf": [
-                                {"required": ["image_data"]},
-                                {"required": ["image_url"]}
-                            ]
+                            "required": ["image_url"]
                         }
                     }
                 ]
@@ -112,9 +111,20 @@ async def mcp_endpoint(request: Request):
         arguments = params.get("arguments", {})
         
         if tool_name == "analyze_color_accessibility":
+            # Get the image URL from arguments
+            image_url = arguments.get("image_url", "")
+            wcag_level = arguments.get("wcag_level", "AA")
+            
+            # Log for debugging
+            print(f"🎨 Analyzing image: {image_url}")
+            print(f"📊 WCAG Level: {wcag_level}")
+            
             # Mock data for demonstration
-            # In production, this would call the actual analysis logic
+            # TODO: In production, download the image from image_url and analyze it
+            # You can use libraries like: Pillow, opencv-python, pytesseract
             accessibility_data = {
+                "image_url": image_url,
+                "wcag_level": wcag_level,
                 "total_pairs": 3,
                 "passed_pairs": 1,
                 "failed_pairs": 2,
@@ -187,7 +197,7 @@ async def mcp_endpoint(request: Request):
                     "content": [
                         {
                             "type": "text",
-                            "text": f"🎨 Analyzed {accessibility_data['total_pairs']} color pairs. {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed WCAG AA standards."
+                            "text": f"🎨 Analyzed image from URL: {image_url[:50]}...\n\n📊 WCAG {wcag_level}: {accessibility_data['total_pairs']} color pairs found. {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed."
                         },
                         {
                             "type": "resource",
