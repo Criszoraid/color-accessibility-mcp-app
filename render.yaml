@@ -4,24 +4,12 @@ services:
     runtime: python
     plan: free
     region: oregon
-    buildCommand: |
-      echo "🔧 Instalando dependencias..."
-      if [ -f "web/package.json" ]; then
-        cd web && npm ci && npm run build && cd ..
-      else
-        echo "⚠️  No se encontró web/package.json, saltando build del frontend"
-      fi
-      echo "📦 Instalando dependencias Python..."
-      pip install -r server/requirements.txt
-      echo "✅ Build completado"
+    buildCommand: pip install -r server/requirements.txt
     startCommand: cd server && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: BASE_URL
         sync: false
-        generateValue: true
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: PORT
-        value: 10000
     healthCheckPath: /
     autoDeploy: true
