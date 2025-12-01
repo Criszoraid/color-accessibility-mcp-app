@@ -291,9 +291,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: "object",
         properties: {
-          image: {
+          image_url: {
             type: "string",
-            description: "Base64-encoded image, data URL, or image URL to analyze"
+            description: "URL of the image to analyze (http/https)"
+          },
+          image_data: {
+            type: "string",
+            description: "Base64-encoded image data or data URL"
           },
           wcag_level: {
             type: "string",
@@ -302,7 +306,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: "WCAG conformance level to check against"
           }
         },
-        required: ["image"]
+        anyOf: [
+          { required: ["image_url"] },
+          { required: ["image_data"] }
+        ]
       },
       annotations: {
         readOnlyHint: true
@@ -317,7 +324,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 // Handler para ejecutar tool
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === "accessibility_check_image_colors") {
-    const { image, wcag_level = "both" } = request.params.arguments;
+    const { image_url, image_data, wcag_level = "both" } = request.params.arguments;
+    const image = image_url || image_data;
 
     try {
       const results = await analyzeImageAccessibility(image, wcag_level);
