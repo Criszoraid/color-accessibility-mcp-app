@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: color-accessibility-checker
+    runtime: python
+    buildCommand: |
+      cd web && npm install && npm run build && cd .. &&
+      pip install -r server/requirements.txt
+    startCommand: cd server && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BASE_URL
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
