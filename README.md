@@ -253,28 +253,50 @@ Para instrucciones detalladas, consulta **[DEPLOY.md](./DEPLOY.md)** que incluye
 
 ## 🚀 Despliegue en Render
 
-### Opción 1: Desde GitHub (Recomendado)
+Tu aplicación está lista para desplegarse en Render.com. El repositorio incluye un archivo `render.yaml` preconfigurado que Render detectará automáticamente.
 
-1. **Fork este repositorio** en tu cuenta de GitHub
-2. Ve a [Render.com](https://render.com) y crea una cuenta
-3. Crea un nuevo **Web Service**
-4. Conecta tu repositorio de GitHub
-5. Configura:
-   - **Build Command:** `npm install && npm run build && pip install -r server_python/requirements.txt`
-   - **Start Command:** `cd server_python && uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - **Environment:** Python 3
-6. Añade variable de entorno:
-   - `BASE_URL` = `https://tu-app.onrender.com`
-7. Click en **Deploy**
+### 🎯 Pasos Rápidos
 
-### Opción 2: Usando `render.yaml`
+1. **Ve a [Render.com](https://render.com)** e inicia sesión con GitHub
+2. **Click en "New +"** > **"Web Service"**
+3. **Conecta tu repositorio**: Selecciona `Criszoraid/color-accessibility-mcp-app`
+4. **Render detectará automáticamente** el `render.yaml` y configurará todo
+5. **Click en "Create Web Service"**
+6. **Espera 5-10 minutos** mientras Render construye y despliega
+7. **¡Listo!** Tu app estará en: `https://color-accessibility-mcp-app.onrender.com`
 
-El proyecto incluye un archivo `render.yaml` preconfigurado:
+### ⚙️ Configuración Automática
 
+El archivo `render.yaml` ya incluye:
+- ✅ Build command optimizado
+- ✅ Start command configurado
+- ✅ Variables de entorno (BASE_URL se genera automáticamente)
+- ✅ Health check en `/`
+- ✅ Auto-deploy activado
+
+### 📚 Documentación Completa
+
+Para instrucciones detalladas, troubleshooting y configuración avanzada, consulta:
+- **[RENDER_DEPLOY.md](./RENDER_DEPLOY.md)** - Guía completa de despliegue en Render
+
+### 🔧 Configuración Manual (Opcional)
+
+Si prefieres configurar manualmente:
+
+**Build Command:**
 ```bash
-git push origin main
-# Render detectará automáticamente render.yaml
+if [ -f "web/package.json" ]; then cd web && npm ci && npm run build && cd ..; fi && pip install -r server/requirements.txt
 ```
+
+**Start Command:**
+```bash
+cd server && uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+**Variables de Entorno:**
+- `BASE_URL`: Se genera automáticamente
+- `PYTHON_VERSION`: 3.11.0
+- `PORT`: 10000
 
 ---
 
