@@ -4,8 +4,9 @@ services:
     runtime: python
     plan: free
     region: oregon
+    rootDir: .
     buildCommand: pip install -r server/requirements.txt
-    startCommand: cd server && uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: cd server && python -m uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: BASE_URL
         sync: false
