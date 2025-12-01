@@ -1,5 +1,7 @@
+import express from 'express';
+import cors from 'cors';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -7,6 +9,11 @@ import {
 import Tesseract from 'tesseract.js';
 import sharp from 'sharp';
 import { converter, formatHex, formatCss } from 'culori';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Conversores de color
 const oklch = converter('oklch');
@@ -180,40 +187,24 @@ async function extractDominantColor(imageBuffer, x, y, width, height) {
 // Procesar imagen y detectar texto con colores
 async function analyzeImageAccessibility(imageData, wcagLevel = 'both') {
   try {
-    // Claude Desktop puede enviar la imagen de diferentes formas
     let imageBuffer;
 
-    // Si es un objeto con data
     if (typeof imageData === 'object' && imageData.data) {
       imageBuffer = Buffer.from(imageData.data, 'base64');
-    }
-    // Si es una ruta de archivo
-    else if (typeof imageData === 'string' && imageData.startsWith('/')) {
-      const fs = await import('fs/promises');
+    } else if (typeof imageData === 'string' && imageData.startsWith('/')) {
       imageBuffer = await fs.readFile(imageData);
-    }
-    // Si es data URL
-    else if (typeof imageData === 'string' && imageData.startsWith('data:')) {
+    } else if (typeof imageData === 'string' && imageData.startsWith('data:')) {
       const base64Data = imageData.split(',')[1];
       imageBuffer = Buffer.from(base64Data, 'base64');
-    }
-    // Si es URL http
-    else if (typeof imageData === 'string' && imageData.startsWith('http')) {
+    } else if (typeof imageData === 'string' && imageData.startsWith('http')) {
       const response = await fetch(imageData);
       imageBuffer = Buffer.from(await response.arrayBuffer());
-    }
-    // Base64 directo
-    else {
+    } else {
       imageBuffer = Buffer.from(imageData, 'base64');
     }
 
-    // Convertir a PNG si no lo es
-    imageBuffer = await sharp(imageBuffer)
-      .png()
-      .toBuffer();
-
+    imageBuffer = await sharp(imageBuffer).png().toBuffer();
     const metadata = await sharp(imageBuffer).metadata();
-
     const { data: { words } } = await Tesseract.recognize(imageBuffer, 'eng+spa');
 
     const colorPairs = [];
@@ -291,9 +282,6 @@ async function analyzeImageAccessibility(imageData, wcagLevel = 'both') {
   }
 }
 
-// Template HTML del componente UI
-const UI_TEMPLATE = `<!-- El template HTML completo está en el artifact separado -->`;
-
 // Registrar tool
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -328,26 +316,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 // Handler para ejecutar tool
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  console.error('=== RAW REQUEST RECEIVED ===');
-  console.error(JSON.stringify(request, null, 2));
-  console.error('===========================');
   if (request.params.name === "accessibility_check_image_colors") {
-    console.error('=== TOOL CALLED ===');
-    console.error('Request params:', JSON.stringify(request.params, null, 2));
-
     const { image, wcag_level = "both" } = request.params.arguments;
-
-    console.error('Image parameter type:', typeof image);
-    console.error('Image parameter:', image);
 
     try {
       const results = await analyzeImageAccessibility(image, wcag_level);
+
+      // Read and inject template
+      const templatePath = path.join(__dirname, '../web/ui-template.html');
+      let htmlContent = await fs.readFile(templatePath, 'utf-8');
+      
+      // Inject data
+      htmlContent = htmlContent.replace(
+        'const sampleData = {', 
+        `const sampleData = ${JSON.stringify(results)}; \n const _ignored = {`
+      );
 
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(results, null, 2)
+          },
+          {
+            type: "resource",
+            resource: {
+              uri: "ui://widget/color-accessibility.html",
+              mimeType: "text/html",
+              text: htmlContent
+            }
           }
         ]
       };
@@ -376,11 +373,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error(`Unknown tool: ${request.params.name}`);
 });
 
-// Iniciar servidor
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Color Accessibility Checker MCP Server running on stdio");
-}
+// Express App
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
 
-main().catch(console.error);
+// Health check
+app.get('/', (req, res) => {
+  res.json({ status: 'active', service: 'Color Accessibility MCP' });
+});
+
+// SSE Endpoint
+let transport;
+app.get('/mcp/sse', async (req, res) => {
+  console.log('New SSE connection');
+  transport = new SSEServerTransport('/mcp/messages', res);
+  await server.connect(transport);
+});
+
+app.post('/mcp/messages', async (req, res) => {
+  if (transport) {
+    await transport.handlePostMessage(req, res);
+  } else {
+    res.status(400).send('No active connection');
+  }
+});
+
+const PORT = process.env.PORT || 8000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
