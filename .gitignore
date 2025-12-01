@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+mcp-server/node_modules/
 __pycache__/
 *.pyc
 *.pyo
@@ -9,6 +10,12 @@ env/
 venv/
 ENV/
 .venv
+
+# MCP Server Node.js files (no necesarios para Render)
+mcp-server/package.json
+mcp-server/package-lock.json
+mcp-server/index.js
+mcp-server/test.js
 
 # Build outputs
 dist/
