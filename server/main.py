@@ -70,11 +70,13 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
     try:
         from coloraide import Color
         
+        print(f"    📐 Converting colors to OKLCH: bg={bg_hex}, fg={fg_hex}")
         bg_color = Color(bg_hex)
         fg_color = Color(fg_hex)
         
         bg_oklch = bg_color.convert('oklch')
         fg_oklch = fg_color.convert('oklch')
+        print(f"    ✅ OKLCH conversion successful")
         
         # Option 1: Lighten background
         for delta in [0.1, 0.2, 0.3, 0.4, 0.5]:
@@ -86,14 +88,16 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
             
             ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
             if ratio >= target_ratio:
-                suggestions.append({
+                suggestion = {
                     "type": "lighten_bg",
                     "background_oklch": new_bg_oklch.to_string(),
                     "foreground_oklch": fg_oklch.to_string(),
                     "new_contrast_ratio": round(ratio, 1),
                     "preview_hex_bg": new_bg_hex,
                     "preview_hex_fg": fg_hex
-                })
+                }
+                suggestions.append(suggestion)
+                print(f"    ✅ Found lighten_bg suggestion: {new_bg_hex} → {ratio:.2f}:1")
                 break
         
         # Option 2: Darken background
@@ -106,14 +110,16 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
             
             ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
             if ratio >= target_ratio:
-                suggestions.append({
+                suggestion = {
                     "type": "darken_bg",
                     "background_oklch": new_bg_oklch.to_string(),
                     "foreground_oklch": fg_oklch.to_string(),
                     "new_contrast_ratio": round(ratio, 1),
                     "preview_hex_bg": new_bg_hex,
                     "preview_hex_fg": fg_hex
-                })
+                }
+                suggestions.append(suggestion)
+                print(f"    ✅ Found darken_bg suggestion: {new_bg_hex} → {ratio:.2f}:1")
                 break
         
         # Option 3: Adjust foreground
@@ -126,17 +132,24 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
         
         ratio = calculate_contrast_ratio(bg_rgb, new_fg_rgb)
         if ratio >= target_ratio:
-            suggestions.append({
+            suggestion = {
                 "type": "adjust_fg",
                 "background_oklch": bg_oklch.to_string(),
                 "foreground_oklch": new_fg_oklch.to_string(),
                 "new_contrast_ratio": round(ratio, 1),
                 "preview_hex_bg": bg_hex,
                 "preview_hex_fg": new_fg_hex
-            })
+            }
+            suggestions.append(suggestion)
+            print(f"    ✅ Found adjust_fg suggestion: {new_fg_hex} → {ratio:.2f}:1")
     
+    except ImportError as e:
+        print(f"❌ ERROR: coloraide not installed or import failed: {e}")
+        print(f"   Install with: pip install coloraide")
     except Exception as e:
         print(f"⚠️ Error generating OKLCH suggestions: {e}")
+        import traceback
+        traceback.print_exc()
     
     return suggestions
 
@@ -448,7 +461,11 @@ async def mcp_endpoint(request: Request):
                     # Generate suggestions if fails
                     suggestions = []
                     if not wcag["passes_aa_normal"]:
+                        print(f"  🔍 Generating OKLCH suggestions for failing pair: {fg_hex} on {bg_hex}")
                         suggestions = generate_oklch_suggestions(bg_hex, fg_hex, 4.5)
+                        print(f"  💡 Generated {len(suggestions)} suggestions")
+                        if len(suggestions) == 0:
+                            print(f"  ⚠️ No suggestions generated - coloraide may not be working correctly")
                     
                     analyzed_pairs.append({
                         "text_sample": element,
