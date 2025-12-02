@@ -1096,18 +1096,19 @@ async def mcp_endpoint(request: Request):
             # Handle data URL (base64) from ChatGPT
             if image_url and image_url.startswith("data:image"):
                 print("📥 Processing data URL (base64 image)")
+                print(f"📝 Base64 data URL length: {len(image_url)} characters")
                 
-                # EARLY CHECK: Detect truncated base64 before processing
-                if len(image_url) < 1000:
-                    print(f"❌ Base64 data is truncated! Only {len(image_url)} characters received.")
-                    print("   This is a known limitation: ChatGPT cannot send large images via MCP.")
+                # Try to process even if it seems small - sometimes small images are valid
+                # Only reject if it's clearly too small to be a valid image
+                if len(image_url) < 100:
+                    print(f"❌ Base64 data is too small! Only {len(image_url)} characters received.")
                     accessibility_data = {
                         "total_pairs": 0,
                         "passed_pairs": 0,
                         "failed_pairs": 0,
                         "color_pairs": [],
-                        "error": "Image data truncated. ChatGPT cannot send large images via the MCP protocol.",
-                        "suggestion": "🔧 SOLUTION: Please provide a PUBLIC URL to the image instead of uploading it directly. You can upload the image to Imgur (imgur.com) or another image hosting service, then share the URL with me."
+                        "error": f"Image data too small ({len(image_url)} chars). The base64 data appears to be truncated or invalid.",
+                        "suggestion": "💡 Try uploading the image again, or provide a public URL to the image (e.g., upload to imgur.com and share the direct image URL)."
                     }
                 else:
                     try:
