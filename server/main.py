@@ -676,7 +676,12 @@ async def mcp_endpoint(request: Request):
       container.innerHTML = data.color_pairs.map(pair => renderColorPair(pair)).join('');
     }
 
-    // Listen for data from ChatGPT
+    // Check for server-injected data immediately (Tutorial Pattern)
+    if (window.__ACCESSIBILITY_DATA__) {
+        renderResults(window.__ACCESSIBILITY_DATA__);
+    }
+
+    // Listen for data from ChatGPT (Standard Pattern)
     window.addEventListener('openai:set_globals', (event) => {
         const globals = event.detail?.globals;
         if (!globals) return;
@@ -706,6 +711,12 @@ async def mcp_endpoint(request: Request):
 </html>
 """
             
+            # INJECT DATA DIRECTLY INTO HTML (Tutorial Pattern)
+            # This ensures data is available immediately without waiting for events
+            json_data = json.dumps(accessibility_data)
+            injection = f"<script>window.__ACCESSIBILITY_DATA__ = {json_data};</script>"
+            widget_html_with_data = widget_html.replace("</body>", f"{injection}</body>")
+            
             return JSONResponse({
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -720,7 +731,7 @@ async def mcp_endpoint(request: Request):
                             "resource": {
                                 "uri": "ui://widget/color-accessibility.html",
                                 "mimeType": "text/html+skybridge",
-                                "text": widget_html
+                                "text": widget_html_with_data
                             }
                         }
                     ],
