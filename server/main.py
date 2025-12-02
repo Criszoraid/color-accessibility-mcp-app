@@ -5,6 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
 from pathlib import Path
+import requests
+from PIL import Image
+from io import BytesIO
+import numpy as np
 
 app = FastAPI(title="Color Accessibility Checker MCP Server")
 
@@ -53,6 +57,148 @@ async def widget():
 
 # Store generated widgets in memory
 WIDGET_CACHE = {}
+
+def calculate_luminance(r, g, b):
+    """Calculate relative luminance according to WCAG"""
+    def normalize(c):
+        c = c / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * normalize(r) + 0.7152 * normalize(g) + 0.0722 * normalize(b)
+
+def calculate_contrast_ratio(rgb1, rgb2):
+    """Calculate contrast ratio between two RGB colors"""
+    l1 = calculate_luminance(rgb1[0], rgb1[1], rgb1[2])
+    l2 = calculate_luminance(rgb2[0], rgb2[1], rgb2[2])
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return (lighter + 0.05) / (darker + 0.05)
+
+def rgb_to_hex(r, g, b):
+    """Convert RGB to hex color"""
+    return f"#{r:02x}{g:02x}{b:02x}".upper()
+
+def evaluate_wcag(ratio):
+    """Evaluate WCAG compliance for a contrast ratio"""
+    return {
+        "passes_aa_normal": ratio >= 4.5,
+        "passes_aa_large": ratio >= 3.0,
+        "passes_aaa_normal": ratio >= 7.0,
+        "passes_aaa_large": ratio >= 4.5
+    }
+
+def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
+    """Analyze color accessibility in an image"""
+    try:
+        print(f"📥 Downloading image from: {image_url}")
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+        
+        print(f"✅ Image downloaded, size: {len(response.content)} bytes")
+        img = Image.open(BytesIO(response.content))
+        img = img.convert('RGB')
+        
+        # Resize if too large for faster processing
+        max_size = 1000
+        if img.width > max_size or img.height > max_size:
+            ratio = min(max_size / img.width, max_size / img.height)
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+            print(f"📐 Resized to: {new_size}")
+        
+        img_array = np.array(img)
+        height, width = img_array.shape[:2]
+        
+        print(f"🖼️ Image dimensions: {width}x{height}")
+        
+        # Sample regions to find text-like areas (darker regions on lighter backgrounds)
+        # This is a simplified approach - in production you'd use OCR
+        color_pairs = []
+        sample_regions = min(20, (width * height) // 10000)  # Sample up to 20 regions
+        
+        for i in range(sample_regions):
+            # Sample random regions
+            x = np.random.randint(0, max(1, width - 50))
+            y = np.random.randint(0, max(1, height - 50))
+            region_w = min(50, width - x)
+            region_h = min(50, height - y)
+            
+            region = img_array[y:y+region_h, x:x+region_w]
+            
+            # Get dominant colors in region
+            pixels = region.reshape(-1, 3)
+            
+            # Simple clustering: find two most distinct colors
+            # Center pixel as foreground estimate
+            center_y, center_x = region_h // 2, region_w // 2
+            fg_color = tuple(pixels[center_y * region_w + center_x])
+            
+            # Average of edge pixels as background estimate
+            edge_pixels = np.concatenate([
+                region[0, :].reshape(-1, 3),  # top edge
+                region[-1, :].reshape(-1, 3),  # bottom edge
+                region[:, 0].reshape(-1, 3),  # left edge
+                region[:, -1].reshape(-1, 3)   # right edge
+            ])
+            bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
+            
+            # Calculate contrast
+            ratio = calculate_contrast_ratio(fg_color, bg_color)
+            wcag = evaluate_wcag(ratio)
+            
+            # Determine which is actually foreground (darker) and background (lighter)
+            fg_lum = calculate_luminance(*fg_color)
+            bg_lum = calculate_luminance(*bg_color)
+            
+            if fg_lum > bg_lum:
+                # Swap if we got it backwards
+                fg_color, bg_color = bg_color, fg_color
+                ratio = calculate_contrast_ratio(fg_color, bg_color)
+                wcag = evaluate_wcag(ratio)
+            
+            color_pairs.append({
+                "text_sample": f"Sample {i+1}",
+                "background": rgb_to_hex(*bg_color),
+                "foreground": rgb_to_hex(*fg_color),
+                "ratio": round(ratio, 1),
+                "passes_aa_normal": wcag["passes_aa_normal"],
+                "passes_aa_large": wcag["passes_aa_large"],
+                "passes_aaa_normal": wcag["passes_aaa_normal"],
+                "passes_aaa_large": wcag["passes_aaa_large"]
+            })
+        
+        # Remove duplicates and sort by ratio
+        unique_pairs = {}
+        for pair in color_pairs:
+            key = (pair["background"], pair["foreground"])
+            if key not in unique_pairs or pair["ratio"] < unique_pairs[key]["ratio"]:
+                unique_pairs[key] = pair
+        
+        color_pairs = list(unique_pairs.values())
+        color_pairs.sort(key=lambda x: x["ratio"], reverse=True)
+        
+        passed_pairs = sum(1 for p in color_pairs if p["passes_aa_normal"])
+        failed_pairs = len(color_pairs) - passed_pairs
+        
+        print(f"✅ Analysis complete: {len(color_pairs)} unique color pairs found")
+        
+        return {
+            "total_pairs": len(color_pairs),
+            "passed_pairs": passed_pairs,
+            "failed_pairs": failed_pairs,
+            "color_pairs": color_pairs[:15]  # Limit to top 15
+        }
+        
+    except Exception as e:
+        print(f"❌ Error analyzing image: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        # Return empty data on error
+        return {
+            "total_pairs": 0,
+            "passed_pairs": 0,
+            "failed_pairs": 0,
+            "color_pairs": []
+        }
 
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
@@ -527,44 +673,8 @@ async def mcp_endpoint(request: Request):
             print(f"🎨 Received request to analyze image: {image_url[:50]}...")
             print(f"📊 WCAG Level: {wcag_level}")
             
-            # Mock data for demonstration
-            accessibility_data = {
-                "total_pairs": 12,
-                "passed_pairs": 5,
-                "failed_pairs": 7,
-                "color_pairs": [
-                    {
-                        "text_sample": "Header Text",
-                        "background": "#ffffff",
-                        "foreground": "#000000",
-                        "ratio": 21.0,
-                        "passes_aa_normal": True,
-                        "passes_aa_large": True,
-                        "passes_aaa_normal": True,
-                        "passes_aaa_large": True
-                    },
-                    {
-                        "text_sample": "Button Text",
-                        "background": "#3b82f6",
-                        "foreground": "#ffffff",
-                        "ratio": 3.5,
-                        "passes_aa_normal": False,
-                        "passes_aa_large": True,
-                        "passes_aaa_normal": False,
-                        "passes_aaa_large": False
-                    },
-                    {
-                        "text_sample": "Footer Link",
-                        "background": "#1f2937",
-                        "foreground": "#4b5563",
-                        "ratio": 2.8,
-                        "passes_aa_normal": False,
-                        "passes_aa_large": False,
-                        "passes_aaa_normal": False,
-                        "passes_aaa_large": False
-                    }
-                ]
-            }
+            # Analyze the actual image
+            accessibility_data = analyze_image_colors(image_url, wcag_level)
             
             # We need to redefine widget_html here because it's scoped to resources/read above
             # In a real app, this would be a shared constant or template file
