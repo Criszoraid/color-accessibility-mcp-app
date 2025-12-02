@@ -511,29 +511,43 @@ def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
             "passed_pairs": 0,
             "failed_pairs": 0,
             "color_pairs": [],
-            "error": error_msg
+            "error": error_msg,
+            "suggestion": "💡 Try again or use a different image URL. Make sure the URL points directly to an image file, not a webpage."
         }
     except requests.exceptions.RequestException as e:
         error_msg = f"Error downloading image: {str(e)}"
         print(f"❌ {error_msg}")
+        suggestion = "💡 Make sure the URL is publicly accessible and points directly to an image file (e.g., .png, .jpg). If you uploaded an image to ChatGPT, try using the base64 data URL instead."
         return {
             "total_pairs": 0,
             "passed_pairs": 0,
             "failed_pairs": 0,
             "color_pairs": [],
-            "error": error_msg
+            "error": error_msg,
+            "suggestion": suggestion
         }
     except Exception as e:
-        error_msg = f"Error processing image URL: {str(e)}"
-        print(f"❌ {error_msg}")
+        error_msg = str(e)
+        print(f"❌ Error processing image URL: {error_msg}")
         import traceback
         traceback.print_exc()
+        
+        # Provide helpful suggestions based on error type
+        suggestion = ""
+        if "webpage" in error_msg.lower() or "html" in error_msg.lower():
+            suggestion = "💡 The URL you provided points to a webpage, not an image. Please:\n1. Take a screenshot of the page\n2. Upload it to imgur.com or postimages.org\n3. Share the direct image URL (e.g., https://i.imgur.com/xxxxx.png)"
+        elif "content-type" in error_msg.lower():
+            suggestion = "💡 The URL does not point to an image file. Make sure it ends with .png, .jpg, .jpeg, or .gif, or is a direct link to an image."
+        else:
+            suggestion = "💡 Make sure the URL points directly to an image file. If you uploaded an image to ChatGPT, it should automatically provide a base64 data URL - use that instead."
+        
         return {
             "total_pairs": 0,
             "passed_pairs": 0,
             "failed_pairs": 0,
             "color_pairs": [],
-            "error": error_msg
+            "error": error_msg,
+            "suggestion": suggestion
         }
 
 @app.post("/mcp")
