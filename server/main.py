@@ -104,6 +104,10 @@ async def mcp_endpoint(request: Request):
                                 }
                             },
                             "required": ["image_url"]
+                        },
+                        "_meta": {
+                            "openai/outputTemplate": "ui://widget/color-accessibility.html",
+                            "openai/widgetAccessible": True
                         }
                     }
                 ]
