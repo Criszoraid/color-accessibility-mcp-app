@@ -209,14 +209,29 @@ async def mcp_endpoint(request: Request):
 
         // Listen for data from ChatGPT
         window.addEventListener('openai:set_globals', (event) => {
-            if (event.detail && event.detail.globals && event.detail.globals.toolOutput && event.detail.globals.toolOutput.accessibility) {
-                renderData(event.detail.globals.toolOutput.accessibility);
+            const globals = event.detail?.globals;
+            if (!globals) return;
+            
+            // Try to find the data in likely locations
+            if (globals.data) {
+                renderData(globals.data);
+            } else if (globals.accessibility) {
+                renderData(globals.accessibility);
+            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+                renderData(globals.toolOutput.accessibility);
             }
         });
 
         // Also check if data is already available on window.openai
-        if (window.openai && window.openai.toolOutput && window.openai.toolOutput.accessibility) {
-            renderData(window.openai.toolOutput.accessibility);
+        if (window.openai) {
+            const globals = window.openai;
+            if (globals.data) {
+                renderData(globals.data);
+            } else if (globals.accessibility) {
+                renderData(globals.accessibility);
+            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+                renderData(globals.toolOutput.accessibility);
+            }
         }
     </script>
 </body>
@@ -441,14 +456,29 @@ async def mcp_endpoint(request: Request):
 
         // Listen for data from ChatGPT
         window.addEventListener('openai:set_globals', (event) => {
-            if (event.detail && event.detail.globals && event.detail.globals.toolOutput && event.detail.globals.toolOutput.accessibility) {
-                renderData(event.detail.globals.toolOutput.accessibility);
+            const globals = event.detail?.globals;
+            if (!globals) return;
+            
+            // Try to find the data in likely locations
+            if (globals.data) {
+                renderData(globals.data);
+            } else if (globals.accessibility) {
+                renderData(globals.accessibility);
+            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+                renderData(globals.toolOutput.accessibility);
             }
         });
 
         // Also check if data is already available on window.openai
-        if (window.openai && window.openai.toolOutput && window.openai.toolOutput.accessibility) {
-            renderData(window.openai.toolOutput.accessibility);
+        if (window.openai) {
+            const globals = window.openai;
+            if (globals.data) {
+                renderData(globals.data);
+            } else if (globals.accessibility) {
+                renderData(globals.accessibility);
+            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+                renderData(globals.toolOutput.accessibility);
+            }
         }
     </script>
 </body>
