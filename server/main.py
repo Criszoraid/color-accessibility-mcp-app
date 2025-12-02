@@ -260,14 +260,27 @@ async def mcp_endpoint(request: Request):
     <title>Color Accessibility Results</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }}
-        .container {{ max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
-        h1 {{ color: #1a1a1a; margin-bottom: 20px; font-size: 24px; }}
-        .summary {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }}
-        .stat-card {{ background: #f8f9fa; padding: 16px; border-radius: 8px; text-align: center; }}
-        .stat-value {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
-        .stat-label {{ font-size: 14px; color: #6b7280; margin-top: 4px; }}
-        .color-pair {{ background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px; }}
+        body {{ 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+            padding: 16px; 
+            background: transparent;
+            max-height: 600px;
+            overflow-y: auto;
+        }}
+        .container {{ 
+            max-width: 100%; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 8px; 
+            padding: 20px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+        }}
+        h1 {{ color: #1a1a1a; margin-bottom: 16px; font-size: 20px; }}
+        .summary {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }}
+        .stat-card {{ background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; }}
+        .stat-value {{ font-size: 28px; font-weight: bold; color: #2563eb; }}
+        .stat-label {{ font-size: 12px; color: #6b7280; margin-top: 4px; }}
+        .color-pair {{ background: #f8f9fa; padding: 14px; border-radius: 6px; margin-bottom: 12px; }}
         .pair-header {{ font-weight: 600; margin-bottom: 12px; color: #374151; }}
         .color-preview {{ display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }}
         .color-swatch {{ width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }}
