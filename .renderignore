@@ -1,0 +1,11 @@
+package.json
+package-lock.json
+node_modules/
+web/node_modules/
+__pycache__/
+*.pyc
+.env
+.git/
+*.log
+index.js
+test.js
