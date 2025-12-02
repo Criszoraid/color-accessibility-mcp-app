@@ -951,13 +951,13 @@ async def mcp_endpoint(request: Request):
                 "tools": [
                     {
                         "name": "analyze_color_accessibility",
-                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements. Provide the image URL when available.",
+                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements. Accepts image URLs (http/https) or base64 data URLs.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "image_url": {
                                     "type": "string",
-                                    "description": "URL of the image to analyze (required)"
+                                    "description": "URL of the image to analyze (http:// or https://) or base64 data URL (data:image/...). Can be a screenshot uploaded to ChatGPT or a public image URL."
                                 },
                                 "wcag_level": {
                                     "type": "string",
@@ -967,6 +967,30 @@ async def mcp_endpoint(request: Request):
                                 }
                             },
                             "required": ["image_url"]
+                        },
+                        "_meta": {
+                            "openai/outputTemplate": "ui://widget/color-accessibility.html",
+                            "openai/widgetAccessible": True
+                        }
+                    },
+                    {
+                        "name": "analyze_url_accessibility",
+                        "description": "Analyze color accessibility of an image from a public URL. Use this when you have a direct link to an image (e.g., https://example.com/screenshot.png). Detects text and background colors, calculates WCAG contrast ratios, and provides OKLCH color suggestions for improvements.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "url": {
+                                    "type": "string",
+                                    "description": "Public URL of the image to analyze (must start with http:// or https://). The image must be publicly accessible."
+                                },
+                                "wcag_level": {
+                                    "type": "string",
+                                    "enum": ["AA", "AAA"],
+                                    "description": "WCAG conformance level to check against (default: AA)",
+                                    "default": "AA"
+                                }
+                            },
+                            "required": ["url"]
                         },
                         "_meta": {
                             "openai/outputTemplate": "ui://widget/color-accessibility.html",
@@ -984,6 +1008,44 @@ async def mcp_endpoint(request: Request):
         if tool_name == "analyze_color_accessibility":
             image_url = arguments.get("image_url")
             wcag_level = arguments.get("wcag_level", "AA")
+            
+            if not image_url:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "image_url is required"
+                    }
+                })
+        
+        elif tool_name == "analyze_url_accessibility":
+            # This tool specifically for URLs
+            image_url = arguments.get("url")
+            wcag_level = arguments.get("wcag_level", "AA")
+            
+            if not image_url:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "url is required"
+                    }
+                })
+            
+            # Validate it's a URL, not base64
+            if not image_url.startswith(('http://', 'https://')):
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": f"URL must start with http:// or https://. Received: {image_url[:50]}..."
+                    }
+                })
+        
+        if tool_name in ["analyze_color_accessibility", "analyze_url_accessibility"]:
             
             print(f"🎨 Received request to analyze image")
             print(f"📊 WCAG Level: {wcag_level}")
