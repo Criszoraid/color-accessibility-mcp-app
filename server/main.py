@@ -457,25 +457,32 @@ def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
         
         # Check content type
         content_type = response.headers.get('content-type', '').lower()
-        if not content_type.startswith('image/'):
-            print(f"⚠️ Warning: Content-Type is '{content_type}', expected image/*")
         
-        # Check content length if available
-        content_length = response.headers.get('content-length')
-        if content_length and int(content_length) > max_size:
-            raise ValueError(f"Image too large: {content_length} bytes (max: {max_size})")
-        
-        # Download content with size check
+        # Download content with size check (download first to check if it's HTML)
         content = b''
         for chunk in response.iter_content(chunk_size=8192):
             content += chunk
             if len(content) > max_size:
                 raise ValueError(f"Image too large: exceeds {max_size} bytes")
+            # Early detection: if we see HTML tags, it's not an image
+            if len(content) > 100:
+                content_str = content[:200].decode('utf-8', errors='ignore').lower()
+                if '<html' in content_str or '<!doctype' in content_str or '<body' in content_str:
+                    raise ValueError(f"URL points to a webpage (HTML), not an image. Please provide a direct link to an image file (e.g., .png, .jpg, .jpeg). You can take a screenshot and upload it to imgur.com or postimages.org, then share the direct image URL.")
         
-        print(f"✅ Image downloaded, size: {len(content)} bytes, type: {content_type}")
+        print(f"✅ Content downloaded, size: {len(content)} bytes, type: {content_type}")
+        
+        # Validate content type
+        if not content_type.startswith('image/'):
+            # Try to detect if it's HTML
+            if len(content) > 0:
+                content_start = content[:200].decode('utf-8', errors='ignore').lower()
+                if '<html' in content_start or '<!doctype' in content_start:
+                    raise ValueError(f"URL points to a webpage (HTML), not an image. Content-Type: '{content_type}'. Please provide a direct link to an image file (e.g., .png, .jpg). You can take a screenshot and upload it to imgur.com, then share the direct image URL.")
+            raise ValueError(f"URL does not point to an image. Content-Type: '{content_type}'. Expected image/*. Please provide a direct link to an image file.")
         
         if len(content) < 100:
-            raise ValueError(f"Image data too small: {len(content)} bytes")
+            raise ValueError(f"Image data too small: {len(content)} bytes. This might not be a valid image.")
         
         # Try to open and validate image
         try:
@@ -484,7 +491,15 @@ def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
             img = img.convert('RGB')
             print(f"✅ Image loaded successfully: {img.format}, {img.size}, {img.mode}")
         except Exception as e:
-            raise ValueError(f"Invalid image format: {e}")
+            # Check if content looks like HTML
+            if len(content) > 0:
+                try:
+                    content_str = content[:500].decode('utf-8', errors='ignore').lower()
+                    if '<html' in content_str or '<!doctype' in content_str:
+                        raise ValueError(f"URL points to a webpage (HTML), not an image. Please provide a direct link to an image file. You can take a screenshot and upload it to imgur.com or postimages.org, then share the direct image URL.")
+                except:
+                    pass
+            raise ValueError(f"Invalid image format: {e}. The URL might not point to a valid image file.")
         
         return analyze_image_colors_from_pil(img, wcag_level)
         
@@ -965,13 +980,13 @@ async def mcp_endpoint(request: Request):
                 "tools": [
                     {
                         "name": "analyze_color_accessibility",
-                        "description": "Analyze color accessibility in an image according to WCAG standards. IMPORTANT: Due to payload size limits, base64 images from ChatGPT uploads are often truncated and will fail. Please use a PUBLIC IMAGE URL instead (http:// or https://). If the user uploads an image, ask them to provide a public URL to the image (e.g., upload to Imgur first). Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions.",
+                        "description": "Analyze color accessibility in an image according to WCAG standards. Accepts image URLs (http/https) or base64 data URLs from uploaded images. When a user uploads an image directly to ChatGPT, you can use the base64 data URL that ChatGPT provides. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "image_url": {
                                     "type": "string",
-                                    "description": "PUBLIC URL of the image to analyze (must start with http:// or https://). Base64 data URLs are NOT supported due to size limits. Ask user to provide a public URL."
+                                    "description": "URL of the image to analyze (http:// or https://) OR base64 data URL (data:image/...) from an uploaded image. If the user uploads an image directly, ChatGPT will provide a base64 data URL - use that. If providing a URL, it must be a direct link to an image file (e.g., https://example.com/image.png), not a webpage."
                                 },
                                 "wcag_level": {
                                     "type": "string",
