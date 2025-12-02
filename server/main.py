@@ -712,10 +712,13 @@ async def mcp_endpoint(request: Request):
 """
             
             # INJECT DATA DIRECTLY INTO HTML (Tutorial Pattern)
-            # This ensures data is available immediately without waiting for events
+            # FIX: Inject BEFORE the main script so it's available when the script runs
             json_data = json.dumps(accessibility_data)
             injection = f"<script>window.__ACCESSIBILITY_DATA__ = {json_data};</script>"
-            widget_html_with_data = widget_html.replace("</body>", f"{injection}</body>")
+            
+            # Replace the opening <script> tag with the data injection + the script tag
+            # This ensures data is defined before the logic runs
+            widget_html_with_data = widget_html.replace("<script>", f"{injection}\n  <script>")
             
             return JSONResponse({
                 "jsonrpc": "2.0",
