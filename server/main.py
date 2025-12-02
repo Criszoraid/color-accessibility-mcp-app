@@ -304,7 +304,9 @@ def analyze_image_colors_from_pil(img: Image.Image, wcag_level: str = "AA"):
         # Fallback: sample regions if OCR not available or failed
         if not color_pairs:
             print("📊 Sampling regions (OCR not available or failed)...")
-            sample_regions = min(20, (width * height) // 10000)
+            # Ensure we always sample at least some regions
+            sample_regions = max(10, min(30, (width * height) // 5000))
+            print(f"📊 Will sample {sample_regions} regions")
             
             for i in range(sample_regions):
                 x = np.random.randint(0, max(1, width - 50))
@@ -313,17 +315,44 @@ def analyze_image_colors_from_pil(img: Image.Image, wcag_level: str = "AA"):
                 region_h = min(50, height - y)
                 
                 region = img_array[y:y+region_h, x:x+region_w]
+                
+                # Validate region
+                if region.size == 0 or region.shape[0] == 0 or region.shape[1] == 0:
+                    continue
+                
                 pixels = region.reshape(-1, 3)
                 
-                center_y, center_x = region_h // 2, region_w // 2
-                fg_color = tuple(pixels[center_y * region_w + center_x])
+                if len(pixels) == 0:
+                    continue
                 
-                edge_pixels = np.concatenate([
-                    region[0, :].reshape(-1, 3),
-                    region[-1, :].reshape(-1, 3),
-                    region[:, 0].reshape(-1, 3),
-                    region[:, -1].reshape(-1, 3)
-                ])
+                center_y, center_x = region_h // 2, region_w // 2
+                pixel_idx = center_y * region_w + center_x
+                
+                if pixel_idx >= len(pixels):
+                    pixel_idx = len(pixels) // 2
+                
+                fg_color = tuple(pixels[pixel_idx])
+                
+                # Get edge pixels safely
+                edge_pixels = []
+                if region.shape[0] > 0:
+                    edge_pixels.extend(region[0, :].reshape(-1, 3))
+                if region.shape[0] > 1:
+                    edge_pixels.extend(region[-1, :].reshape(-1, 3))
+                if region.shape[1] > 0:
+                    edge_pixels.extend(region[:, 0].reshape(-1, 3))
+                if region.shape[1] > 1:
+                    edge_pixels.extend(region[:, -1].reshape(-1, 3))
+                
+                if not edge_pixels:
+                    # Fallback: use corners
+                    edge_pixels = [
+                        region[0, 0],
+                        region[0, -1] if region.shape[1] > 1 else region[0, 0],
+                        region[-1, 0] if region.shape[0] > 1 else region[0, 0],
+                        region[-1, -1] if (region.shape[0] > 1 and region.shape[1] > 1) else region[0, 0]
+                    ]
+                
                 bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
                 
                 ratio = calculate_contrast_ratio(fg_color, bg_color)
@@ -372,6 +401,11 @@ def analyze_image_colors_from_pil(img: Image.Image, wcag_level: str = "AA"):
         failed_pairs = len(color_pairs) - passed_pairs
         
         print(f"✅ Analysis complete: {len(color_pairs)} unique color pairs found")
+        print(f"   - Passed: {passed_pairs}, Failed: {failed_pairs}")
+        
+        if len(color_pairs) == 0:
+            print("⚠️ WARNING: No color pairs found! This might indicate an issue with image processing.")
+            print(f"   Image size: {width}x{height}, Array shape: {img_array.shape}")
         
         return {
             "total_pairs": len(color_pairs),
@@ -927,6 +961,11 @@ async def mcp_endpoint(request: Request):
                 accessibility_data = analyze_image_colors(image_url, wcag_level)
             
             print(f"📊 Final data: {accessibility_data['total_pairs']} pairs, {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed")
+            
+            # Validate data before sending
+            if accessibility_data['total_pairs'] == 0:
+                print("⚠️ WARNING: Sending empty data! Check logs above for errors.")
+                print(f"   Data structure: {json.dumps(accessibility_data, indent=2)}")
             
             # We need to redefine widget_html here because it's scoped to resources/read above
             # In a real app, this would be a shared constant or template file
