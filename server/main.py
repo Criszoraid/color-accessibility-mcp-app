@@ -6,9 +6,12 @@ import json
 import os
 from pathlib import Path
 import requests
-from PIL import Image
+from PIL import Image, ImageFile
 from io import BytesIO
 import numpy as np
+
+# Allow loading truncated images (fixes EXIF chunk errors)
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 try:
     import pytesseract
     OCR_AVAILABLE = True
