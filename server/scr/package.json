@@ -1,0 +1,38 @@
+{
+  "name": "color-accessibility-mcp-sse",
+  "version": "1.0.0",
+  "description": "MCP server con SSE para análisis de accesibilidad de colores según WCAG",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch index.ts",
+    "start": "node dist/index.js",
+    "tunnel": "ngrok http 8000"
+  },
+  "keywords": [
+    "mcp",
+    "accessibility",
+    "wcag",
+    "color-contrast",
+    "oklch",
+    "sse"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "tesseract.js": "^5.0.4",
+    "sharp": "^0.33.0",
+    "culori": "^4.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
