@@ -964,13 +964,13 @@ async def mcp_endpoint(request: Request):
                 "tools": [
                     {
                         "name": "analyze_color_accessibility",
-                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements. Accepts image URLs (http/https) or base64 data URLs.",
+                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements. IMPORTANT: This tool only accepts image URLs (http:// or https://). When a user uploads an image, ChatGPT should provide a temporary URL for the uploaded image.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "image_url": {
                                     "type": "string",
-                                    "description": "URL of the image to analyze (http:// or https://) or base64 data URL (data:image/...). Can be a screenshot uploaded to ChatGPT or a public image URL."
+                                    "description": "Public URL of the image to analyze. Must start with http:// or https://. When a user uploads an image to ChatGPT, use the temporary URL that ChatGPT generates for that image (e.g., https://files.oaiusercontent.com/...). DO NOT send base64 data URLs as they are too large and will be truncated."
                                 },
                                 "wcag_level": {
                                     "type": "string",
@@ -1062,23 +1062,45 @@ async def mcp_endpoint(request: Request):
             
             print(f"🎨 Received request to analyze image")
             print(f"📊 WCAG Level: {wcag_level}")
-            print(f"📝 Image URL/data type: {type(image_url)}")
-            print(f"📝 Image URL/data full length: {len(str(image_url))} characters")
+            print(f"📝 Image URL type: {type(image_url)}")
+            print(f"📝 Image URL preview: {str(image_url)[:200]}...")
             
-            # Check if it looks like truncated base64
-            if isinstance(image_url, str) and image_url.startswith("data:image"):
-                if len(image_url) < 1000:
-                    print(f"⚠️ WARNING: Base64 data URL is very short ({len(image_url)} chars)")
-                    print(f"   Expected: 1000+ characters for a typical screenshot")
-                    print(f"   This might be truncated by the JSON payload size limit")
-                print(f"📝 First 200 chars: {image_url[:200]}")
-                if len(image_url) > 200:
-                    print(f"📝 Last 200 chars: ...{image_url[-200:]}")
-            else:
-                print(f"📝 Image URL/data preview: {str(image_url)[:200]}...")
-            
-            # Handle data URL (base64) from ChatGPT
+            # REJECT base64 data URLs - they are too large and get truncated
             if image_url and image_url.startswith("data:image"):
+                error_msg = (
+                    "This tool only accepts image URLs (http:// or https://), not base64 data URLs. "
+                    "Base64 images are too large and get truncated by JSON-RPC payload limits. "
+                    "When a user uploads an image to ChatGPT, ChatGPT should automatically generate "
+                    "a temporary URL (e.g., https://files.oaiusercontent.com/...) for that image. "
+                    "Please use that URL instead of base64."
+                )
+                print(f"❌ REJECTED: Base64 data URL received (length: {len(image_url)} chars)")
+                print(f"   {error_msg}")
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": error_msg
+                    }
+                })
+            
+            # Validate it's a proper URL
+            if not image_url or not image_url.startswith(('http://', 'https://')):
+                error_msg = f"Invalid image URL. Must start with http:// or https://. Received: {str(image_url)[:100]}..."
+                print(f"❌ {error_msg}")
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": error_msg
+                    }
+                })
+            
+            # Process URL (no base64 handling)
+            print(f"✅ Valid URL received, downloading image...")
+            try:
                 print("📥 Processing data URL (base64 image)")
                 try:
                     # Log full input for debugging
