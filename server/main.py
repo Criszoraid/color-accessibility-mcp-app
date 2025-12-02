@@ -80,6 +80,70 @@ async def mcp_endpoint(request: Request):
             }
         })
     
+    elif method == "resources/list":
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {
+                "resources": [
+                    {
+                        "uri": "ui://widget/color-accessibility.html",
+                        "name": "Color Accessibility Widget",
+                        "description": "Interactive widget for color accessibility analysis",
+                        "mimeType": "text/html+skybridge"
+                    }
+                ]
+            }
+        })
+    
+    elif method == "resources/read":
+        uri = params.get("uri")
+        if uri == "ui://widget/color-accessibility.html":
+            # Return a placeholder HTML for the resource
+            # The actual HTML with data will be returned in tools/call
+            placeholder_html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Accessibility Widget</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; text-align: center; }
+        .placeholder { color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="placeholder">
+        <h2>🎨 Color Accessibility Checker</h2>
+        <p>Upload an image to analyze color accessibility</p>
+    </div>
+</body>
+</html>
+"""
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "text/html+skybridge",
+                            "text": placeholder_html
+                        }
+                    ]
+                }
+            })
+        else:
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32602,
+                    "message": f"Resource not found: {uri}"
+                }
+            })
+    
     elif method == "tools/list":
         return JSONResponse({
             "jsonrpc": "2.0",
