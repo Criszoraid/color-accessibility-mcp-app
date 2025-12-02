@@ -1050,31 +1050,67 @@ async def mcp_endpoint(request: Request):
             print(f"🎨 Received request to analyze image")
             print(f"📊 WCAG Level: {wcag_level}")
             print(f"📝 Image URL/data type: {type(image_url)}")
-            print(f"📝 Image URL/data preview: {str(image_url)[:100]}...")
+            print(f"📝 Image URL/data full length: {len(str(image_url))} characters")
+            
+            # Check if it looks like truncated base64
+            if isinstance(image_url, str) and image_url.startswith("data:image"):
+                if len(image_url) < 1000:
+                    print(f"⚠️ WARNING: Base64 data URL is very short ({len(image_url)} chars)")
+                    print(f"   Expected: 1000+ characters for a typical screenshot")
+                    print(f"   This might be truncated by the JSON payload size limit")
+                print(f"📝 First 200 chars: {image_url[:200]}")
+                if len(image_url) > 200:
+                    print(f"📝 Last 200 chars: ...{image_url[-200:]}")
+            else:
+                print(f"📝 Image URL/data preview: {str(image_url)[:200]}...")
             
             # Handle data URL (base64) from ChatGPT
             if image_url and image_url.startswith("data:image"):
                 print("📥 Processing data URL (base64 image)")
                 try:
+                    # Log full input for debugging
+                    print(f"📝 Full image_url length: {len(image_url)} characters")
+                    print(f"📝 First 200 chars: {image_url[:200]}...")
+                    print(f"📝 Last 200 chars: ...{image_url[-200:]}")
+                    
                     # Extract base64 data
                     if ',' not in image_url:
                         raise ValueError("Invalid data URL format: no comma found")
                     
                     header, encoded = image_url.split(',', 1)
-                    print(f"📝 Data URL header: {header[:50]}...")
-                    print(f"📝 Base64 length: {len(encoded)} characters")
+                    print(f"📝 Data URL header: {header}")
+                    print(f"📝 Base64 string length: {len(encoded)} characters")
+                    print(f"📝 Base64 preview (first 100): {encoded[:100]}...")
+                    print(f"📝 Base64 preview (last 100): ...{encoded[-100:]}")
+                    
+                    # Check if base64 looks truncated (should end with padding or valid base64 chars)
+                    if len(encoded) < 100:
+                        print(f"⚠️ WARNING: Base64 string is very short ({len(encoded)} chars). This might be truncated.")
+                        print(f"   Expected: ~1000+ characters for a typical screenshot")
                     
                     import base64
                     try:
+                        # Try decoding with padding fix if needed
+                        # Base64 strings should be multiples of 4, pad if needed
+                        missing_padding = len(encoded) % 4
+                        if missing_padding:
+                            encoded += '=' * (4 - missing_padding)
+                            print(f"📝 Added {4 - missing_padding} padding characters")
+                        
                         image_data = base64.b64decode(encoded, validate=True)
                         print(f"✅ Decoded {len(image_data)} bytes from base64")
                     except Exception as e:
                         print(f"❌ Base64 decode error: {e}")
+                        print(f"   Base64 string was {len(encoded)} characters")
                         raise ValueError(f"Invalid base64 data: {e}")
                     
                     # Validate image data
                     if len(image_data) < 100:
-                        raise ValueError(f"Image data too small: {len(image_data)} bytes")
+                        error_msg = f"Image data too small: {len(image_data)} bytes (expected at least 100 bytes for a valid image)"
+                        print(f"❌ {error_msg}")
+                        print(f"   This usually means the base64 data was truncated.")
+                        print(f"   Original base64 length: {len(encoded)} characters")
+                        raise ValueError(error_msg)
                     
                     # Try to open image directly from bytes first (more reliable)
                     try:
