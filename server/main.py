@@ -109,6 +109,7 @@ async def mcp_endpoint(request: Request):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Color Accessibility Checker</title>
+  <!-- DATA_INJECTION_POINT -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: transparent; padding: 20px; min-height: 600px; }
@@ -157,6 +158,7 @@ async def mcp_endpoint(request: Request):
     .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
     #loading { text-align: center; padding: 60px 20px; color: #86868b; }
     #content { display: none; }
+    #debug-log { font-family: monospace; font-size: 10px; color: #999; margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; display: none; }
   </style>
 </head>
 <body>
@@ -209,9 +211,26 @@ async def mcp_endpoint(request: Request):
         </div>
         </div>
     </div>
+    
+    <div id="debug-log"></div>
   </div>
 
   <script>
+    function log(msg) {
+        const el = document.getElementById('debug-log');
+        el.textContent += msg + '\\n';
+        console.log(msg);
+    }
+
+    // Show debug log if loading takes too long
+    setTimeout(() => {
+        if (document.getElementById('loading').style.display !== 'none') {
+            document.getElementById('debug-log').style.display = 'block';
+            log('⚠️ Timeout waiting for data. Showing debug log.');
+            log('Current window.__ACCESSIBILITY_DATA__: ' + (window.__ACCESSIBILITY_DATA__ ? 'Present' : 'Missing'));
+        }
+    }, 3000);
+
     function showTab(tabName) {
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
@@ -306,6 +325,7 @@ async def mcp_endpoint(request: Request):
     }
 
     function renderResults(data) {
+      log('Rendering results...');
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
 
@@ -317,30 +337,53 @@ async def mcp_endpoint(request: Request):
       // Render color pairs
       const container = document.getElementById('colors-content');
       container.innerHTML = data.color_pairs.map(pair => renderColorPair(pair)).join('');
+      log('Render complete.');
     }
 
-    // Listen for data from ChatGPT
+    // Check for server-injected data immediately (Tutorial Pattern)
+    log('Checking for injected data...');
+    if (window.__ACCESSIBILITY_DATA__) {
+        log('✅ Injected data found!');
+        renderResults(window.__ACCESSIBILITY_DATA__);
+    } else {
+        log('❌ No injected data found. Waiting for event...');
+    }
+
+    // Listen for data from ChatGPT (Standard Pattern)
     window.addEventListener('openai:set_globals', (event) => {
+        log('📩 Received openai:set_globals event');
         const globals = event.detail?.globals;
-        if (!globals) return;
+        if (!globals) {
+            log('❌ Event has no globals');
+            return;
+        }
         
         if (globals.data) {
+            log('✅ Found globals.data');
             renderResults(globals.data);
         } else if (globals.accessibility) {
+            log('✅ Found globals.accessibility');
             renderResults(globals.accessibility);
         } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            log('✅ Found globals.toolOutput.accessibility');
             renderResults(globals.toolOutput.accessibility);
+        } else {
+            log('❌ Could not find data in globals: ' + JSON.stringify(Object.keys(globals)));
         }
     });
 
     // Also check if data is already available on window.openai
     if (window.openai) {
+        log('Checking window.openai...');
         const globals = window.openai;
         if (globals.data) {
+            log('✅ Found window.openai.data');
             renderResults(globals.data);
         } else if (globals.accessibility) {
+            log('✅ Found window.openai.accessibility');
             renderResults(globals.accessibility);
         } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            log('✅ Found window.openai.toolOutput.accessibility');
             renderResults(globals.toolOutput.accessibility);
         }
     }
@@ -466,6 +509,7 @@ async def mcp_endpoint(request: Request):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Color Accessibility Checker</title>
+  <!-- DATA_INJECTION_POINT -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: transparent; padding: 20px; min-height: 600px; }
@@ -514,6 +558,7 @@ async def mcp_endpoint(request: Request):
     .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
     #loading { text-align: center; padding: 60px 20px; color: #86868b; }
     #content { display: none; }
+    #debug-log { font-family: monospace; font-size: 10px; color: #999; margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; display: none; }
   </style>
 </head>
 <body>
@@ -566,9 +611,26 @@ async def mcp_endpoint(request: Request):
         </div>
         </div>
     </div>
+    
+    <div id="debug-log"></div>
   </div>
 
   <script>
+    function log(msg) {
+        const el = document.getElementById('debug-log');
+        el.textContent += msg + '\\n';
+        console.log(msg);
+    }
+
+    // Show debug log if loading takes too long
+    setTimeout(() => {
+        if (document.getElementById('loading').style.display !== 'none') {
+            document.getElementById('debug-log').style.display = 'block';
+            log('⚠️ Timeout waiting for data. Showing debug log.');
+            log('Current window.__ACCESSIBILITY_DATA__: ' + (window.__ACCESSIBILITY_DATA__ ? 'Present' : 'Missing'));
+        }
+    }, 3000);
+
     function showTab(tabName) {
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
@@ -663,6 +725,7 @@ async def mcp_endpoint(request: Request):
     }
 
     function renderResults(data) {
+      log('Rendering results...');
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
 
@@ -674,35 +737,53 @@ async def mcp_endpoint(request: Request):
       // Render color pairs
       const container = document.getElementById('colors-content');
       container.innerHTML = data.color_pairs.map(pair => renderColorPair(pair)).join('');
+      log('Render complete.');
     }
 
     // Check for server-injected data immediately (Tutorial Pattern)
+    log('Checking for injected data...');
     if (window.__ACCESSIBILITY_DATA__) {
+        log('✅ Injected data found!');
         renderResults(window.__ACCESSIBILITY_DATA__);
+    } else {
+        log('❌ No injected data found. Waiting for event...');
     }
 
     // Listen for data from ChatGPT (Standard Pattern)
     window.addEventListener('openai:set_globals', (event) => {
+        log('📩 Received openai:set_globals event');
         const globals = event.detail?.globals;
-        if (!globals) return;
+        if (!globals) {
+            log('❌ Event has no globals');
+            return;
+        }
         
         if (globals.data) {
+            log('✅ Found globals.data');
             renderResults(globals.data);
         } else if (globals.accessibility) {
+            log('✅ Found globals.accessibility');
             renderResults(globals.accessibility);
         } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            log('✅ Found globals.toolOutput.accessibility');
             renderResults(globals.toolOutput.accessibility);
+        } else {
+            log('❌ Could not find data in globals: ' + JSON.stringify(Object.keys(globals)));
         }
     });
 
     // Also check if data is already available on window.openai
     if (window.openai) {
+        log('Checking window.openai...');
         const globals = window.openai;
         if (globals.data) {
+            log('✅ Found window.openai.data');
             renderResults(globals.data);
         } else if (globals.accessibility) {
+            log('✅ Found window.openai.accessibility');
             renderResults(globals.accessibility);
         } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            log('✅ Found window.openai.toolOutput.accessibility');
             renderResults(globals.toolOutput.accessibility);
         }
     }
@@ -712,13 +793,11 @@ async def mcp_endpoint(request: Request):
 """
             
             # INJECT DATA DIRECTLY INTO HTML (Tutorial Pattern)
-            # FIX: Inject BEFORE the main script so it's available when the script runs
+            # FIX: Use explicit placeholder to guarantee injection point
             json_data = json.dumps(accessibility_data)
             injection = f"<script>window.__ACCESSIBILITY_DATA__ = {json_data};</script>"
             
-            # Replace the opening <script> tag with the data injection + the script tag
-            # This ensures data is defined before the logic runs
-            widget_html_with_data = widget_html.replace("<script>", f"{injection}\n  <script>")
+            widget_html_with_data = widget_html.replace("<!-- DATA_INJECTION_POINT -->", injection)
             
             return JSONResponse({
                 "jsonrpc": "2.0",
