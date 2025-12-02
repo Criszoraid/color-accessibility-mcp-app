@@ -84,14 +84,21 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
         
         bg_oklch = bg_color.convert('oklch')
         fg_oklch = fg_color.convert('oklch')
-        print(f"    ✅ OKLCH conversion successful (bg L={bg_oklch.lightness:.2f}, fg L={fg_oklch.lightness:.2f})")
+        
+        # Get lightness values using coords() - returns (L, C, H)
+        bg_coords = bg_oklch.coords()
+        fg_coords = fg_oklch.coords()
+        bg_lightness = bg_coords[0]
+        fg_lightness = fg_coords[0]
+        
+        print(f"    ✅ OKLCH conversion successful (bg L={bg_lightness:.2f}, fg L={fg_lightness:.2f})")
         
         # Option 1: Lighten background (if background is dark)
-        if bg_oklch.lightness < 0.7:  # Only if background is relatively dark
+        if bg_lightness < 0.7:  # Only if background is relatively dark
             for delta in [0.15, 0.25, 0.35, 0.45, 0.55]:
                 try:
                     new_bg_oklch = bg_oklch.clone()
-                    new_lightness = min(0.95, bg_oklch.lightness + delta)
+                    new_lightness = min(0.95, bg_lightness + delta)
                     new_bg_oklch.set('lightness', new_lightness)
                     new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
                     new_bg_rgb = hex_to_rgb(new_bg_hex)
@@ -115,11 +122,11 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
                     continue
         
         # Option 2: Darken background (if background is light)
-        if bg_oklch.lightness > 0.3:  # Only if background is relatively light
+        if bg_lightness > 0.3:  # Only if background is relatively light
             for delta in [-0.15, -0.25, -0.35, -0.45, -0.55]:
                 try:
                     new_bg_oklch = bg_oklch.clone()
-                    new_lightness = max(0.05, bg_oklch.lightness + delta)
+                    new_lightness = max(0.05, bg_lightness + delta)
                     new_bg_oklch.set('lightness', new_lightness)
                     new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
                     new_bg_rgb = hex_to_rgb(new_bg_hex)
@@ -144,10 +151,10 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
         
         # Option 3: Adjust foreground (make it more contrasting)
         # If foreground is light, make it darker; if dark, make it lighter
-        fg_delta = -0.4 if fg_oklch.lightness > 0.5 else 0.4
+        fg_delta = -0.4 if fg_lightness > 0.5 else 0.4
         try:
             new_fg_oklch = fg_oklch.clone()
-            new_lightness = max(0.05, min(0.95, fg_oklch.lightness + fg_delta))
+            new_lightness = max(0.05, min(0.95, fg_lightness + fg_delta))
             new_fg_oklch.set('lightness', new_lightness)
             new_fg_hex = new_fg_oklch.convert('srgb').to_string(hex=True, fit=True)
             new_fg_rgb = hex_to_rgb(new_fg_hex)
