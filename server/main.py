@@ -492,15 +492,13 @@ async def mcp_endpoint(request: Request):
         log('✅ Injected data found!');
         renderResults(window.__ACCESSIBILITY_DATA__);
     } else {
-        log('❌ No injected data found. Waiting for event...');
+        log('⏳ No injected data found. Waiting for toolOutput...');
     }
 
     // Listen for data from ChatGPT (Standard Pattern)
     window.addEventListener('openai:set_globals', (event) => {
-        log('📩 Received openai:set_globals event');
         const globals = event.detail?.globals;
         if (!globals) {
-            log('❌ Event has no globals');
             return;
         }
         
@@ -509,32 +507,33 @@ async def mcp_endpoint(request: Request):
             window.openai = {};
         }
         Object.assign(window.openai, globals);
-        log('✅ Updated window.openai with globals');
-        log('Available keys in globals: ' + JSON.stringify(Object.keys(globals)));
+        
+        // Only process if toolOutput exists and has data
+        if (!globals.toolOutput) {
+            // This is normal - toolInput arrives first, toolOutput comes later
+            return;
+        }
+        
+        log('📩 Received openai:set_globals event with toolOutput');
+        log('toolOutput keys: ' + JSON.stringify(Object.keys(globals.toolOutput)));
         
         // Try to find data in different possible locations
         let data = null;
         
-        // Check globals.toolOutput directly (could be the full object)
-        if (globals.toolOutput) {
-            log('✅ Found globals.toolOutput');
-            log('toolOutput keys: ' + JSON.stringify(Object.keys(globals.toolOutput)));
-            
-            // Check if toolOutput is the data itself
-            if (globals.toolOutput.total_pairs !== undefined) {
-                data = globals.toolOutput;
-                log('✅ Found data directly in toolOutput');
-            } 
-            // Check toolOutput.accessibility
-            else if (globals.toolOutput.accessibility) {
-                data = globals.toolOutput.accessibility;
-                log('✅ Found globals.toolOutput.accessibility');
-            }
-            // Check toolOutput.data
-            else if (globals.toolOutput.data) {
-                data = globals.toolOutput.data;
-                log('✅ Found globals.toolOutput.data');
-            }
+        // Check if toolOutput is the data itself
+        if (globals.toolOutput.total_pairs !== undefined) {
+            data = globals.toolOutput;
+            log('✅ Found data directly in toolOutput');
+        } 
+        // Check toolOutput.accessibility
+        else if (globals.toolOutput.accessibility) {
+            data = globals.toolOutput.accessibility;
+            log('✅ Found globals.toolOutput.accessibility');
+        }
+        // Check toolOutput.data
+        else if (globals.toolOutput.data) {
+            data = globals.toolOutput.data;
+            log('✅ Found globals.toolOutput.data');
         }
         
         // Check other possible locations
@@ -549,54 +548,35 @@ async def mcp_endpoint(request: Request):
         if (data) {
             renderResults(data);
         } else {
-            log('❌ Could not find data in globals. Keys: ' + JSON.stringify(Object.keys(globals)));
-            log('Full globals object: ' + JSON.stringify(globals, null, 2));
+            log('⚠️ toolOutput exists but no recognizable data structure found');
         }
     });
 
     // Also check if data is already available on window.openai
-    if (window.openai) {
-        log('Checking window.openai...');
+    if (window.openai && window.openai.toolOutput) {
+        log('Checking window.openai for existing data...');
         const globals = window.openai;
-        log('window.openai keys: ' + JSON.stringify(Object.keys(globals)));
         
         let data = null;
         
-        // Check toolOutput first
-        if (globals.toolOutput) {
-            log('✅ Found window.openai.toolOutput');
-            log('toolOutput keys: ' + JSON.stringify(Object.keys(globals.toolOutput)));
-            
-            // Check if toolOutput is the data itself
-            if (globals.toolOutput.total_pairs !== undefined) {
-                data = globals.toolOutput;
-                log('✅ Found data directly in window.openai.toolOutput');
-            }
-            // Check toolOutput.accessibility
-            else if (globals.toolOutput.accessibility) {
-                data = globals.toolOutput.accessibility;
-                log('✅ Found window.openai.toolOutput.accessibility');
-            }
-            // Check toolOutput.data
-            else if (globals.toolOutput.data) {
-                data = globals.toolOutput.data;
-                log('✅ Found window.openai.toolOutput.data');
-            }
+        // Check if toolOutput is the data itself
+        if (globals.toolOutput.total_pairs !== undefined) {
+            data = globals.toolOutput;
+            log('✅ Found data directly in window.openai.toolOutput');
         }
-        
-        // Check other locations
-        if (!data && globals.data) {
-            data = globals.data;
-            log('✅ Found window.openai.data');
-        } else if (!data && globals.accessibility) {
-            data = globals.accessibility;
-            log('✅ Found window.openai.accessibility');
+        // Check toolOutput.accessibility
+        else if (globals.toolOutput.accessibility) {
+            data = globals.toolOutput.accessibility;
+            log('✅ Found window.openai.toolOutput.accessibility');
+        }
+        // Check toolOutput.data
+        else if (globals.toolOutput.data) {
+            data = globals.toolOutput.data;
+            log('✅ Found window.openai.toolOutput.data');
         }
         
         if (data) {
             renderResults(data);
-        } else {
-            log('❌ Could not find data in window.openai');
         }
     }
   </script>
@@ -922,15 +902,13 @@ async def mcp_endpoint(request: Request):
         log('✅ Injected data found!');
         renderResults(window.__ACCESSIBILITY_DATA__);
     } else {
-        log('❌ No injected data found. Waiting for event...');
+        log('⏳ No injected data found. Waiting for toolOutput...');
     }
 
     // Listen for data from ChatGPT (Standard Pattern)
     window.addEventListener('openai:set_globals', (event) => {
-        log('📩 Received openai:set_globals event');
         const globals = event.detail?.globals;
         if (!globals) {
-            log('❌ Event has no globals');
             return;
         }
         
@@ -939,32 +917,33 @@ async def mcp_endpoint(request: Request):
             window.openai = {};
         }
         Object.assign(window.openai, globals);
-        log('✅ Updated window.openai with globals');
-        log('Available keys in globals: ' + JSON.stringify(Object.keys(globals)));
+        
+        // Only process if toolOutput exists and has data
+        if (!globals.toolOutput) {
+            // This is normal - toolInput arrives first, toolOutput comes later
+            return;
+        }
+        
+        log('📩 Received openai:set_globals event with toolOutput');
+        log('toolOutput keys: ' + JSON.stringify(Object.keys(globals.toolOutput)));
         
         // Try to find data in different possible locations
         let data = null;
         
-        // Check globals.toolOutput directly (could be the full object)
-        if (globals.toolOutput) {
-            log('✅ Found globals.toolOutput');
-            log('toolOutput keys: ' + JSON.stringify(Object.keys(globals.toolOutput)));
-            
-            // Check if toolOutput is the data itself
-            if (globals.toolOutput.total_pairs !== undefined) {
-                data = globals.toolOutput;
-                log('✅ Found data directly in toolOutput');
-            } 
-            // Check toolOutput.accessibility
-            else if (globals.toolOutput.accessibility) {
-                data = globals.toolOutput.accessibility;
-                log('✅ Found globals.toolOutput.accessibility');
-            }
-            // Check toolOutput.data
-            else if (globals.toolOutput.data) {
-                data = globals.toolOutput.data;
-                log('✅ Found globals.toolOutput.data');
-            }
+        // Check if toolOutput is the data itself
+        if (globals.toolOutput.total_pairs !== undefined) {
+            data = globals.toolOutput;
+            log('✅ Found data directly in toolOutput');
+        } 
+        // Check toolOutput.accessibility
+        else if (globals.toolOutput.accessibility) {
+            data = globals.toolOutput.accessibility;
+            log('✅ Found globals.toolOutput.accessibility');
+        }
+        // Check toolOutput.data
+        else if (globals.toolOutput.data) {
+            data = globals.toolOutput.data;
+            log('✅ Found globals.toolOutput.data');
         }
         
         // Check other possible locations
@@ -979,54 +958,35 @@ async def mcp_endpoint(request: Request):
         if (data) {
             renderResults(data);
         } else {
-            log('❌ Could not find data in globals. Keys: ' + JSON.stringify(Object.keys(globals)));
-            log('Full globals object: ' + JSON.stringify(globals, null, 2));
+            log('⚠️ toolOutput exists but no recognizable data structure found');
         }
     });
 
     // Also check if data is already available on window.openai
-    if (window.openai) {
-        log('Checking window.openai...');
+    if (window.openai && window.openai.toolOutput) {
+        log('Checking window.openai for existing data...');
         const globals = window.openai;
-        log('window.openai keys: ' + JSON.stringify(Object.keys(globals)));
         
         let data = null;
         
-        // Check toolOutput first
-        if (globals.toolOutput) {
-            log('✅ Found window.openai.toolOutput');
-            log('toolOutput keys: ' + JSON.stringify(Object.keys(globals.toolOutput)));
-            
-            // Check if toolOutput is the data itself
-            if (globals.toolOutput.total_pairs !== undefined) {
-                data = globals.toolOutput;
-                log('✅ Found data directly in window.openai.toolOutput');
-            }
-            // Check toolOutput.accessibility
-            else if (globals.toolOutput.accessibility) {
-                data = globals.toolOutput.accessibility;
-                log('✅ Found window.openai.toolOutput.accessibility');
-            }
-            // Check toolOutput.data
-            else if (globals.toolOutput.data) {
-                data = globals.toolOutput.data;
-                log('✅ Found window.openai.toolOutput.data');
-            }
+        // Check if toolOutput is the data itself
+        if (globals.toolOutput.total_pairs !== undefined) {
+            data = globals.toolOutput;
+            log('✅ Found data directly in window.openai.toolOutput');
         }
-        
-        // Check other locations
-        if (!data && globals.data) {
-            data = globals.data;
-            log('✅ Found window.openai.data');
-        } else if (!data && globals.accessibility) {
-            data = globals.accessibility;
-            log('✅ Found window.openai.accessibility');
+        // Check toolOutput.accessibility
+        else if (globals.toolOutput.accessibility) {
+            data = globals.toolOutput.accessibility;
+            log('✅ Found window.openai.toolOutput.accessibility');
+        }
+        // Check toolOutput.data
+        else if (globals.toolOutput.data) {
+            data = globals.toolOutput.data;
+            log('✅ Found window.openai.toolOutput.data');
         }
         
         if (data) {
             renderResults(data);
-        } else {
-            log('❌ Could not find data in window.openai');
         }
     }
   </script>
