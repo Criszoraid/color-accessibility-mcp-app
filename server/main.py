@@ -472,13 +472,31 @@ async def mcp_endpoint(request: Request):
 
     function renderResults(data) {
       log('Rendering results...');
+      log('Data received: ' + JSON.stringify({
+        total_pairs: data.total_pairs,
+        passed_pairs: data.passed_pairs,
+        failed_pairs: data.failed_pairs,
+        color_pairs_length: data.color_pairs ? data.color_pairs.length : 0
+      }));
+      
+      if (!data || !data.color_pairs || data.color_pairs.length === 0) {
+        log('⚠️ No color pairs to render! Data structure: ' + JSON.stringify(data, null, 2));
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        document.getElementById('passing-count').textContent = '0';
+        document.getElementById('failing-count').textContent = '0';
+        document.getElementById('texts-count').textContent = '0';
+        document.getElementById('colors-content').innerHTML = '<div class="empty-state"><p>No color pairs found in the image</p></div>';
+        return;
+      }
+      
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
 
       // Update summary
-      document.getElementById('passing-count').textContent = data.passed_pairs;
-      document.getElementById('failing-count').textContent = data.failed_pairs;
-      document.getElementById('texts-count').textContent = data.total_pairs;
+      document.getElementById('passing-count').textContent = data.passed_pairs || 0;
+      document.getElementById('failing-count').textContent = data.failed_pairs || 0;
+      document.getElementById('texts-count').textContent = data.total_pairs || 0;
 
       // Render color pairs
       const container = document.getElementById('colors-content');
@@ -650,11 +668,120 @@ async def mcp_endpoint(request: Request):
             image_url = arguments.get("image_url")
             wcag_level = arguments.get("wcag_level", "AA")
             
-            print(f"🎨 Received request to analyze image: {image_url[:50]}...")
+            print(f"🎨 Received request to analyze image")
             print(f"📊 WCAG Level: {wcag_level}")
+            print(f"📝 Image URL/data type: {type(image_url)}")
+            print(f"📝 Image URL/data preview: {str(image_url)[:100]}...")
             
-            # Analyze the actual image
-            accessibility_data = analyze_image_colors(image_url, wcag_level)
+            # Handle data URL (base64) from ChatGPT
+            if image_url and image_url.startswith("data:image"):
+                print("📥 Processing data URL (base64 image)")
+                # Extract base64 data
+                header, encoded = image_url.split(',', 1)
+                import base64
+                image_data = base64.b64decode(encoded)
+                
+                # Save to temporary file or process directly
+                from tempfile import NamedTemporaryFile
+                import os
+                with NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+                    tmp_file.write(image_data)
+                    tmp_path = tmp_file.name
+                
+                try:
+                    # Process the image
+                    img = Image.open(tmp_path)
+                    img = img.convert('RGB')
+                    
+                    # Resize if too large
+                    max_size = 1000
+                    if img.width > max_size or img.height > max_size:
+                        ratio = min(max_size / img.width, max_size / img.height)
+                        new_size = (int(img.width * ratio), int(img.height * ratio))
+                        img = img.resize(new_size, Image.Resampling.LANCZOS)
+                        print(f"📐 Resized to: {new_size}")
+                    
+                    img_array = np.array(img)
+                    height, width = img_array.shape[:2]
+                    print(f"🖼️ Image dimensions: {width}x{height}")
+                    
+                    # Sample regions to find color pairs
+                    color_pairs = []
+                    sample_regions = min(20, (width * height) // 10000)
+                    
+                    for i in range(sample_regions):
+                        x = np.random.randint(0, max(1, width - 50))
+                        y = np.random.randint(0, max(1, height - 50))
+                        region_w = min(50, width - x)
+                        region_h = min(50, height - y)
+                        
+                        region = img_array[y:y+region_h, x:x+region_w]
+                        pixels = region.reshape(-1, 3)
+                        
+                        center_y, center_x = region_h // 2, region_w // 2
+                        fg_color = tuple(pixels[center_y * region_w + center_x])
+                        
+                        edge_pixels = np.concatenate([
+                            region[0, :].reshape(-1, 3),
+                            region[-1, :].reshape(-1, 3),
+                            region[:, 0].reshape(-1, 3),
+                            region[:, -1].reshape(-1, 3)
+                        ])
+                        bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
+                        
+                        ratio = calculate_contrast_ratio(fg_color, bg_color)
+                        wcag = evaluate_wcag(ratio)
+                        
+                        fg_lum = calculate_luminance(*fg_color)
+                        bg_lum = calculate_luminance(*bg_color)
+                        
+                        if fg_lum > bg_lum:
+                            fg_color, bg_color = bg_color, fg_color
+                            ratio = calculate_contrast_ratio(fg_color, bg_color)
+                            wcag = evaluate_wcag(ratio)
+                        
+                        color_pairs.append({
+                            "text_sample": f"Sample {i+1}",
+                            "background": rgb_to_hex(*bg_color),
+                            "foreground": rgb_to_hex(*fg_color),
+                            "ratio": round(ratio, 1),
+                            "passes_aa_normal": wcag["passes_aa_normal"],
+                            "passes_aa_large": wcag["passes_aa_large"],
+                            "passes_aaa_normal": wcag["passes_aaa_normal"],
+                            "passes_aaa_large": wcag["passes_aaa_large"]
+                        })
+                    
+                    # Remove duplicates
+                    unique_pairs = {}
+                    for pair in color_pairs:
+                        key = (pair["background"], pair["foreground"])
+                        if key not in unique_pairs or pair["ratio"] < unique_pairs[key]["ratio"]:
+                            unique_pairs[key] = pair
+                    
+                    color_pairs = list(unique_pairs.values())
+                    color_pairs.sort(key=lambda x: x["ratio"], reverse=True)
+                    
+                    passed_pairs = sum(1 for p in color_pairs if p["passes_aa_normal"])
+                    failed_pairs = len(color_pairs) - passed_pairs
+                    
+                    print(f"✅ Analysis complete: {len(color_pairs)} unique color pairs found")
+                    
+                    accessibility_data = {
+                        "total_pairs": len(color_pairs),
+                        "passed_pairs": passed_pairs,
+                        "failed_pairs": failed_pairs,
+                        "color_pairs": color_pairs[:15]
+                    }
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+            else:
+                # Analyze from URL
+                print(f"📥 Processing image URL")
+                accessibility_data = analyze_image_colors(image_url, wcag_level)
+            
+            print(f"📊 Final data: {accessibility_data['total_pairs']} pairs, {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed")
             
             # We need to redefine widget_html here because it's scoped to resources/read above
             # In a real app, this would be a shared constant or template file
@@ -882,13 +1009,31 @@ async def mcp_endpoint(request: Request):
 
     function renderResults(data) {
       log('Rendering results...');
+      log('Data received: ' + JSON.stringify({
+        total_pairs: data.total_pairs,
+        passed_pairs: data.passed_pairs,
+        failed_pairs: data.failed_pairs,
+        color_pairs_length: data.color_pairs ? data.color_pairs.length : 0
+      }));
+      
+      if (!data || !data.color_pairs || data.color_pairs.length === 0) {
+        log('⚠️ No color pairs to render! Data structure: ' + JSON.stringify(data, null, 2));
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        document.getElementById('passing-count').textContent = '0';
+        document.getElementById('failing-count').textContent = '0';
+        document.getElementById('texts-count').textContent = '0';
+        document.getElementById('colors-content').innerHTML = '<div class="empty-state"><p>No color pairs found in the image</p></div>';
+        return;
+      }
+      
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
 
       // Update summary
-      document.getElementById('passing-count').textContent = data.passed_pairs;
-      document.getElementById('failing-count').textContent = data.failed_pairs;
-      document.getElementById('texts-count').textContent = data.total_pairs;
+      document.getElementById('passing-count').textContent = data.passed_pairs || 0;
+      document.getElementById('failing-count').textContent = data.failed_pairs || 0;
+      document.getElementById('texts-count').textContent = data.total_pairs || 0;
 
       // Render color pairs
       const container = document.getElementById('colors-content');
