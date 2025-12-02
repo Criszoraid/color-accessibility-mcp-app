@@ -429,23 +429,92 @@ def analyze_image_colors_from_pil(img: Image.Image, wcag_level: str = "AA"):
 def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
     """Analyze color accessibility in an image from URL"""
     try:
-        print(f"📥 Downloading image from: {image_url}")
-        response = requests.get(image_url, timeout=30)
+        print(f"📥 Downloading image from: {image_url[:100]}...")
+        
+        # Validate URL format
+        if not image_url.startswith(('http://', 'https://')):
+            raise ValueError(f"Invalid URL format: must start with http:// or https://")
+        
+        # Prepare headers to avoid blocking
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (compatible; ColorAccessibilityBot/1.0)',
+            'Accept': 'image/*,*/*'
+        }
+        
+        # Download with timeout and size limit
+        max_size = 10 * 1024 * 1024  # 10MB limit
+        response = requests.get(
+            image_url, 
+            timeout=30,
+            headers=headers,
+            allow_redirects=True,
+            stream=True  # Stream to check size before downloading
+        )
         response.raise_for_status()
         
-        print(f"✅ Image downloaded, size: {len(response.content)} bytes")
-        img = Image.open(BytesIO(response.content))
+        # Check content type
+        content_type = response.headers.get('content-type', '').lower()
+        if not content_type.startswith('image/'):
+            print(f"⚠️ Warning: Content-Type is '{content_type}', expected image/*")
+        
+        # Check content length if available
+        content_length = response.headers.get('content-length')
+        if content_length and int(content_length) > max_size:
+            raise ValueError(f"Image too large: {content_length} bytes (max: {max_size})")
+        
+        # Download content with size check
+        content = b''
+        for chunk in response.iter_content(chunk_size=8192):
+            content += chunk
+            if len(content) > max_size:
+                raise ValueError(f"Image too large: exceeds {max_size} bytes")
+        
+        print(f"✅ Image downloaded, size: {len(content)} bytes, type: {content_type}")
+        
+        if len(content) < 100:
+            raise ValueError(f"Image data too small: {len(content)} bytes")
+        
+        # Try to open and validate image
+        try:
+            img = Image.open(BytesIO(content))
+            img.load()  # Force load to validate image
+            print(f"✅ Image loaded successfully: {img.format}, {img.size}, {img.mode}")
+        except Exception as e:
+            raise ValueError(f"Invalid image format: {e}")
+        
         return analyze_image_colors_from_pil(img, wcag_level)
         
+    except requests.exceptions.Timeout:
+        error_msg = "Timeout downloading image (took more than 30 seconds)"
+        print(f"❌ {error_msg}")
+        return {
+            "total_pairs": 0,
+            "passed_pairs": 0,
+            "failed_pairs": 0,
+            "color_pairs": [],
+            "error": error_msg
+        }
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Error downloading image: {str(e)}"
+        print(f"❌ {error_msg}")
+        return {
+            "total_pairs": 0,
+            "passed_pairs": 0,
+            "failed_pairs": 0,
+            "color_pairs": [],
+            "error": error_msg
+        }
     except Exception as e:
-        print(f"❌ Error downloading/analyzing image: {str(e)}")
+        error_msg = f"Error processing image URL: {str(e)}"
+        print(f"❌ {error_msg}")
         import traceback
         traceback.print_exc()
         return {
             "total_pairs": 0,
             "passed_pairs": 0,
             "failed_pairs": 0,
-            "color_pairs": []
+            "color_pairs": [],
+            "error": error_msg
         }
 
 @app.post("/mcp")
