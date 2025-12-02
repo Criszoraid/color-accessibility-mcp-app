@@ -10,7 +10,7 @@ from PIL import Image, ImageFile
 from io import BytesIO
 import numpy as np
 
-# Allow loading truncated images (fixes EXIF chunk errors)
+# FIX: Allow loading truncated images (fixes EXIF chunk errors in PNGs)
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 try:
     import pytesseract
@@ -480,7 +480,8 @@ def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
         # Try to open and validate image
         try:
             img = Image.open(BytesIO(content))
-            img.load()  # Force load to validate image
+            # Use convert('RGB') instead of load() to avoid EXIF chunk errors
+            img = img.convert('RGB')
             print(f"✅ Image loaded successfully: {img.format}, {img.size}, {img.mode}")
         except Exception as e:
             raise ValueError(f"Invalid image format: {e}")
@@ -964,13 +965,13 @@ async def mcp_endpoint(request: Request):
                 "tools": [
                     {
                         "name": "analyze_color_accessibility",
-                        "description": "Analyze color accessibility in an image according to WCAG standards. Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions for improvements. Accepts image URLs (http/https) or base64 data URLs. Prefer URLs when possible as they are more reliable.",
+                        "description": "Analyze color accessibility in an image according to WCAG standards. IMPORTANT: Due to payload size limits, base64 images from ChatGPT uploads are often truncated and will fail. Please use a PUBLIC IMAGE URL instead (http:// or https://). If the user uploads an image, ask them to provide a public URL to the image (e.g., upload to Imgur first). Detects text and background colors, calculates contrast ratios, and provides OKLCH color suggestions.",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
                                 "image_url": {
                                     "type": "string",
-                                    "description": "URL of the image to analyze (http:// or https://) or base64 data URL (data:image/...). When a user uploads an image, ChatGPT can either provide a temporary URL (preferred) or a base64 data URL. URLs are preferred as they are more reliable for large images."
+                                    "description": "PUBLIC URL of the image to analyze (must start with http:// or https://). Base64 data URLs are NOT supported due to size limits. Ask user to provide a public URL."
                                 },
                                 "wcag_level": {
                                     "type": "string",
@@ -1062,99 +1063,134 @@ async def mcp_endpoint(request: Request):
             
             print(f"🎨 Received request to analyze image")
             print(f"📊 WCAG Level: {wcag_level}")
-            print(f"📝 Image URL type: {type(image_url)}")
-            print(f"📝 Image URL preview: {str(image_url)[:200]}...")
+            print(f"📝 Image URL/data type: {type(image_url)}")
+            print(f"📝 Image URL/data full length: {len(str(image_url))} characters")
             
-            # Handle both URLs and base64 data URLs
+            # Check if it looks like truncated base64
+            if isinstance(image_url, str) and image_url.startswith("data:image"):
+                if len(image_url) < 1000:
+                    print(f"⚠️ WARNING: Base64 data URL is very short ({len(image_url)} chars)")
+                    print(f"   Expected: 1000+ characters for a typical screenshot")
+                    print(f"   This might be truncated by the JSON payload size limit")
+                print(f"📝 First 200 chars: {image_url[:200]}")
+                if len(image_url) > 200:
+                    print(f"📝 Last 200 chars: ...{image_url[-200:]}")
+            else:
+                print(f"📝 Image URL/data preview: {str(image_url)[:200]}...")
+            
+            # Handle data URL (base64) from ChatGPT
             if image_url and image_url.startswith("data:image"):
-                print("📥 Processing base64 data URL")
-                try:
-                    # Log full input for debugging
-                    print(f"📝 Full image_url length: {len(image_url)} characters")
-                    
-                    # Extract base64 data
-                    if ',' not in image_url:
-                        raise ValueError("Invalid data URL format: no comma found")
-                    
-                    header, encoded = image_url.split(',', 1)
-                    print(f"📝 Data URL header: {header}")
-                    print(f"📝 Base64 string length: {len(encoded)} characters")
-                    
-                    # Check if base64 looks truncated
-                    if len(encoded) < 100:
-                        print(f"⚠️ WARNING: Base64 string is very short ({len(encoded)} chars)")
-                        print(f"   Expected: ~1000+ characters for a typical screenshot")
-                        print(f"   This might be truncated. Consider using a URL instead.")
-                    
-                    import base64
-                    try:
-                        # Try decoding with padding fix if needed
-                        missing_padding = len(encoded) % 4
-                        if missing_padding:
-                            encoded += '=' * (4 - missing_padding)
-                            print(f"📝 Added {4 - missing_padding} padding characters")
-                        
-                        image_data = base64.b64decode(encoded, validate=True)
-                        print(f"✅ Decoded {len(image_data)} bytes from base64")
-                    except Exception as e:
-                        print(f"❌ Base64 decode error: {e}")
-                        raise ValueError(f"Invalid base64 data: {e}")
-                    
-                    # Validate image data
-                    if len(image_data) < 100:
-                        error_msg = f"Image data too small: {len(image_data)} bytes (expected at least 100 bytes). The base64 data appears to be truncated. Please try using a URL instead."
-                        print(f"❌ {error_msg}")
-                        raise ValueError(error_msg)
-                    
-                    # Try to open image
-                    try:
-                        img = Image.open(BytesIO(image_data))
-                        img.load()  # Force load to validate
-                        print(f"✅ Image loaded successfully: {img.format}, {img.size}, {img.mode}")
-                    except Exception as e:
-                        print(f"❌ Error loading image: {e}")
-                        raise ValueError(f"Invalid image format: {e}")
-                    
-                    # Convert to RGB
-                    if img.mode != 'RGB':
-                        img = img.convert('RGB')
-                    
-                    # Analyze image
-                    accessibility_data = analyze_image_colors_from_pil(img, wcag_level)
-                    
-                except Exception as e:
-                    print(f"❌ Error processing base64 image: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    
-                    # Return error data with helpful message
-                    error_msg = str(e)
-                    suggestion = "💡 Tip: If the image is large, try using a public URL instead. ChatGPT can generate a temporary URL for uploaded images."
-                    
+                print("📥 Processing data URL (base64 image)")
+                
+                # EARLY CHECK: Detect truncated base64 before processing
+                if len(image_url) < 1000:
+                    print(f"❌ Base64 data is truncated! Only {len(image_url)} characters received.")
+                    print("   This is a known limitation: ChatGPT cannot send large images via MCP.")
                     accessibility_data = {
                         "total_pairs": 0,
                         "passed_pairs": 0,
                         "failed_pairs": 0,
                         "color_pairs": [],
-                        "error": f"Error processing image: {error_msg}",
-                        "suggestion": suggestion
+                        "error": "Image data truncated. ChatGPT cannot send large images via the MCP protocol.",
+                        "suggestion": "🔧 SOLUTION: Please provide a PUBLIC URL to the image instead of uploading it directly. You can upload the image to Imgur (imgur.com) or another image hosting service, then share the URL with me."
                     }
-            elif image_url and image_url.startswith(('http://', 'https://')):
-                # Handle regular URL
-                print(f"✅ Valid URL received, downloading image...")
-                accessibility_data = analyze_image_colors(image_url, wcag_level)
+                else:
+                    try:
+                        # Log full input for debugging
+                        print(f"📝 Full image_url length: {len(image_url)} characters")
+                        print(f"📝 First 200 chars: {image_url[:200]}...")
+                        print(f"📝 Last 200 chars: ...{image_url[-200:]}")
+                    
+                        # Extract base64 data
+                        if ',' not in image_url:
+                            raise ValueError("Invalid data URL format: no comma found")
+                        
+                        header, encoded = image_url.split(',', 1)
+                        print(f"📝 Data URL header: {header}")
+                        print(f"📝 Base64 string length: {len(encoded)} characters")
+                        print(f"📝 Base64 preview (first 100): {encoded[:100]}...")
+                        print(f"📝 Base64 preview (last 100): ...{encoded[-100:]}")
+                        
+                        # Check if base64 looks truncated (should end with padding or valid base64 chars)
+                        if len(encoded) < 100:
+                            print(f"⚠️ WARNING: Base64 string is very short ({len(encoded)} chars). This might be truncated.")
+                            print(f"   Expected: ~1000+ characters for a typical screenshot")
+                        
+                        import base64
+                        try:
+                            # Try decoding with padding fix if needed
+                            # Base64 strings should be multiples of 4, pad if needed
+                            missing_padding = len(encoded) % 4
+                            if missing_padding:
+                                encoded += '=' * (4 - missing_padding)
+                                print(f"📝 Added {4 - missing_padding} padding characters")
+                            
+                            image_data = base64.b64decode(encoded, validate=True)
+                            print(f"✅ Decoded {len(image_data)} bytes from base64")
+                        except Exception as e:
+                            print(f"❌ Base64 decode error: {e}")
+                            print(f"   Base64 string was {len(encoded)} characters")
+                            raise ValueError(f"Invalid base64 data: {e}")
+                        
+                        # Validate image data
+                        if len(image_data) < 100:
+                            error_msg = f"Image data too small: {len(image_data)} bytes (expected at least 100 bytes for a valid image)"
+                            print(f"❌ {error_msg}")
+                            print(f"   This usually means the base64 data was truncated.")
+                            print(f"   Original base64 length: {len(encoded)} characters")
+                            raise ValueError(error_msg)
+                        
+                        # Try to open image directly from bytes first (more reliable)
+                        try:
+                            img = Image.open(BytesIO(image_data))
+                            # Force load to validate image - use convert to avoid EXIF issues
+                            img = img.convert('RGB')
+                            print(f"✅ Image loaded successfully: {img.format}, {img.size}, {img.mode}")
+                        except Exception as e:
+                            print(f"⚠️ Direct load failed: {e}, trying temp file...")
+                            # Fallback to temp file
+                            from tempfile import NamedTemporaryFile
+                            import os
+                            with NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+                                tmp_file.write(image_data)
+                                tmp_path = tmp_file.name
+                            
+                            try:
+                                img = Image.open(tmp_path)
+                                img = img.convert('RGB')  # Force load and convert
+                                print(f"✅ Image loaded from temp file: {img.format}, {img.size}, {img.mode}")
+                            finally:
+                                # Clean up temp file
+                                if os.path.exists(tmp_path):
+                                    os.unlink(tmp_path)
+                        
+                        # Use the same analysis function
+                        accessibility_data = analyze_image_colors_from_pil(img, wcag_level)
+                        
+                    except Exception as e:
+                        print(f"❌ Error processing base64 image: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        
+                        # Check if error is due to truncated image
+                        error_msg = str(e)
+                        suggestion = ""
+                        if "too small" in error_msg.lower() or "truncated" in error_msg.lower():
+                            suggestion = "💡 Tip: For large images, try using a public URL instead of uploading directly. Use the 'analyze_url_accessibility' tool with an image URL."
+                        
+                        # Return error data with helpful message
+                        accessibility_data = {
+                            "total_pairs": 0,
+                            "passed_pairs": 0,
+                            "failed_pairs": 0,
+                            "color_pairs": [],
+                            "error": f"Error processing image: {error_msg}",
+                            "suggestion": suggestion
+                        }
             else:
-                # Invalid input
-                error_msg = f"Invalid image input. Must be a URL (http:// or https://) or base64 data URL (data:image/...). Received: {str(image_url)[:100]}..."
-                print(f"❌ {error_msg}")
-                return JSONResponse({
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "error": {
-                        "code": -32602,
-                        "message": error_msg
-                    }
-                })
+                # Analyze from URL
+                print(f"📥 Processing image URL")
+                accessibility_data = analyze_image_colors(image_url, wcag_level)
             
             print(f"📊 Final data: {accessibility_data['total_pairs']} pairs, {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed")
             
