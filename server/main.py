@@ -1602,6 +1602,14 @@ async def mcp_endpoint(request: Request):
             
             widget_html_with_data = widget_html.replace("<!-- DATA_INJECTION_POINT -->", injection)
             
+            # Build text message based on whether there's an error
+            if accessibility_data.get('error'):
+                text_message = f"❌ Error analyzing image: {accessibility_data['error']}"
+                if accessibility_data.get('suggestion'):
+                    text_message += f"\n\n💡 {accessibility_data['suggestion']}"
+            else:
+                text_message = f"🎨 Analyzed image from URL: {image_url[:50]}...\n\n📊 WCAG {wcag_level}: {accessibility_data['total_pairs']} color pairs found. {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed."
+            
             return JSONResponse({
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -1609,7 +1617,7 @@ async def mcp_endpoint(request: Request):
                     "content": [
                         {
                             "type": "text",
-                            "text": f"🎨 Analyzed image from URL: {image_url[:50]}...\n\n📊 WCAG {wcag_level}: {accessibility_data['total_pairs']} color pairs found. {accessibility_data['passed_pairs']} passed, {accessibility_data['failed_pairs']} failed."
+                            "text": text_message
                         },
                         {
                             "type": "resource",
