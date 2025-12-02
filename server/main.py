@@ -264,9 +264,10 @@ async def mcp_endpoint(request: Request):
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
             padding: 16px; 
             background: transparent;
+            min-height: 600px;
         }}
         .container {{ 
-            max-width: 1200px; 
+            max-width: 100%; 
             margin: 0 auto; 
             background: white; 
             border-radius: 8px; 
@@ -349,7 +350,7 @@ async def mcp_endpoint(request: Request):
                         {
                             "type": "resource",
                             "resource": {
-                                "uri": "ui://widget/color-accessibility.html",
+                                "uri": f"ui://widget/analysis-{request_id}.html",
                                 "mimeType": "text/html+skybridge",
                                 "text": widget_html
                             }
