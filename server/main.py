@@ -9,6 +9,19 @@ import requests
 from PIL import Image
 from io import BytesIO
 import numpy as np
+try:
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    print("⚠️ pytesseract not available, OCR will be disabled")
+
+try:
+    from coloraide import Color
+    OKLCH_AVAILABLE = True
+except ImportError:
+    OKLCH_AVAILABLE = False
+    print("⚠️ coloraide not available, OKLCH suggestions will be disabled")
 
 app = FastAPI(title="Color Accessibility Checker MCP Server")
 
@@ -86,15 +99,93 @@ def evaluate_wcag(ratio):
         "passes_aaa_large": ratio >= 4.5
     }
 
-def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
-    """Analyze color accessibility in an image"""
+def hex_to_rgb(hex_color):
+    """Convert hex color to RGB tuple"""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
+    """Generate OKLCH color suggestions to improve contrast"""
+    suggestions = []
+    
+    if not OKLCH_AVAILABLE:
+        return suggestions
+    
     try:
-        print(f"📥 Downloading image from: {image_url}")
-        response = requests.get(image_url, timeout=30)
-        response.raise_for_status()
+        # Convert to OKLCH using coloraide
+        bg_color = Color(bg_hex)
+        fg_color = Color(fg_hex)
         
-        print(f"✅ Image downloaded, size: {len(response.content)} bytes")
-        img = Image.open(BytesIO(response.content))
+        bg_oklch = bg_color.convert('oklch')
+        fg_oklch = fg_color.convert('oklch')
+        
+        # Option 1: Lighten background
+        for delta in [0.1, 0.2, 0.3, 0.4, 0.5]:
+            new_bg_oklch = bg_oklch.clone()
+            new_bg_oklch.set('lightness', min(1.0, bg_oklch.lightness + delta))
+            new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
+            new_bg_rgb = hex_to_rgb(new_bg_hex)
+            fg_rgb = hex_to_rgb(fg_hex)
+            
+            ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
+            if ratio >= target_ratio:
+                suggestions.append({
+                    "type": "lighten_bg",
+                    "background_oklch": new_bg_oklch.to_string(),
+                    "foreground_oklch": fg_oklch.to_string(),
+                    "new_contrast_ratio": round(ratio, 1),
+                    "preview_hex_bg": new_bg_hex,
+                    "preview_hex_fg": fg_hex
+                })
+                break
+        
+        # Option 2: Darken background
+        for delta in [-0.1, -0.2, -0.3, -0.4, -0.5]:
+            new_bg_oklch = bg_oklch.clone()
+            new_bg_oklch.set('lightness', max(0.0, bg_oklch.lightness + delta))
+            new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
+            new_bg_rgb = hex_to_rgb(new_bg_hex)
+            fg_rgb = hex_to_rgb(fg_hex)
+            
+            ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
+            if ratio >= target_ratio:
+                suggestions.append({
+                    "type": "darken_bg",
+                    "background_oklch": new_bg_oklch.to_string(),
+                    "foreground_oklch": fg_oklch.to_string(),
+                    "new_contrast_ratio": round(ratio, 1),
+                    "preview_hex_bg": new_bg_hex,
+                    "preview_hex_fg": fg_hex
+                })
+                break
+        
+        # Option 3: Adjust foreground
+        fg_delta = -0.3 if fg_oklch.lightness > 0.5 else 0.3
+        new_fg_oklch = fg_oklch.clone()
+        new_fg_oklch.set('lightness', max(0.0, min(1.0, fg_oklch.lightness + fg_delta)))
+        new_fg_hex = new_fg_oklch.convert('srgb').to_string(hex=True, fit=True)
+        new_fg_rgb = hex_to_rgb(new_fg_hex)
+        bg_rgb = hex_to_rgb(bg_hex)
+        
+        ratio = calculate_contrast_ratio(bg_rgb, new_fg_rgb)
+        if ratio >= target_ratio:
+            suggestions.append({
+                "type": "adjust_fg",
+                "background_oklch": bg_oklch.to_string(),
+                "foreground_oklch": new_fg_oklch.to_string(),
+                "new_contrast_ratio": round(ratio, 1),
+                "preview_hex_bg": bg_hex,
+                "preview_hex_fg": new_fg_hex
+            })
+    
+    except Exception as e:
+        print(f"⚠️ Error generating OKLCH suggestions: {e}")
+    
+    return suggestions
+
+def analyze_image_colors_from_pil(img: Image.Image, wcag_level: str = "AA"):
+    """Analyze color accessibility from a PIL Image object"""
+    try:
         img = img.convert('RGB')
         
         # Resize if too large for faster processing
@@ -110,61 +201,162 @@ def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
         
         print(f"🖼️ Image dimensions: {width}x{height}")
         
-        # Sample regions to find text-like areas (darker regions on lighter backgrounds)
-        # This is a simplified approach - in production you'd use OCR
         color_pairs = []
-        sample_regions = min(20, (width * height) // 10000)  # Sample up to 20 regions
         
-        for i in range(sample_regions):
-            # Sample random regions
-            x = np.random.randint(0, max(1, width - 50))
-            y = np.random.randint(0, max(1, height - 50))
-            region_w = min(50, width - x)
-            region_h = min(50, height - y)
+        # Try OCR first if available
+        if OCR_AVAILABLE:
+            try:
+                print("🔍 Using OCR to detect text...")
+                # Use pytesseract to get word bounding boxes
+                ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT, lang='eng+spa')
+                
+                words_found = []
+                for i in range(len(ocr_data['text'])):
+                    text = ocr_data['text'][i].strip()
+                    conf = int(ocr_data['conf'][i])
+                    if text and conf > 60:  # Confidence threshold
+                        x = ocr_data['left'][i]
+                        y = ocr_data['top'][i]
+                        w = ocr_data['width'][i]
+                        h = ocr_data['height'][i]
+                        words_found.append({
+                            'text': text,
+                            'bbox': (x, y, x + w, y + h),
+                            'confidence': conf
+                        })
+                
+                print(f"📝 Found {len(words_found)} text regions with OCR")
+                
+                # Analyze each word region
+                for word in words_found[:50]:  # Limit to 50 words
+                    x0, y0, x1, y1 = word['bbox']
+                    x0, y0 = max(0, x0 - 5), max(0, y0 - 5)
+                    x1, y1 = min(width, x1 + 5), min(height, y1 + 5)
+                    
+                    if x1 <= x0 or y1 <= y0:
+                        continue
+                    
+                    region = img_array[y0:y1, x0:x1]
+                    if region.size == 0:
+                        continue
+                    
+                    pixels = region.reshape(-1, 3)
+                    
+                    # Foreground: center of text region
+                    center_y, center_x = (y1 - y0) // 2, (x1 - x0) // 2
+                    if center_y * (x1 - x0) + center_x < len(pixels):
+                        fg_color = tuple(pixels[center_y * (x1 - x0) + center_x])
+                    else:
+                        continue
+                    
+                    # Background: average of edge pixels
+                    edge_pixels = []
+                    if region.shape[0] > 0 and region.shape[1] > 0:
+                        edge_pixels.extend(region[0, :].reshape(-1, 3))
+                        if region.shape[0] > 1:
+                            edge_pixels.extend(region[-1, :].reshape(-1, 3))
+                        edge_pixels.extend(region[:, 0].reshape(-1, 3))
+                        if region.shape[1] > 1:
+                            edge_pixels.extend(region[:, -1].reshape(-1, 3))
+                    
+                    if not edge_pixels:
+                        continue
+                    
+                    bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
+                    
+                    # Calculate contrast
+                    ratio = calculate_contrast_ratio(fg_color, bg_color)
+                    wcag = evaluate_wcag(ratio)
+                    
+                    # Determine which is foreground (darker) and background (lighter)
+                    fg_lum = calculate_luminance(*fg_color)
+                    bg_lum = calculate_luminance(*bg_color)
+                    
+                    if fg_lum > bg_lum:
+                        fg_color, bg_color = bg_color, fg_color
+                        ratio = calculate_contrast_ratio(fg_color, bg_color)
+                        wcag = evaluate_wcag(ratio)
+                    
+                    bg_hex = rgb_to_hex(*bg_color)
+                    fg_hex = rgb_to_hex(*fg_color)
+                    
+                    # Generate OKLCH suggestions if it doesn't pass
+                    suggestions = []
+                    target_ratio = 7.0 if wcag_level == "AAA" else 4.5
+                    if not wcag["passes_aa_normal"]:
+                        suggestions = generate_oklch_suggestions(bg_hex, fg_hex, target_ratio)
+                    
+                    color_pairs.append({
+                        "text_sample": word['text'],
+                        "background": bg_hex,
+                        "foreground": fg_hex,
+                        "ratio": round(ratio, 1),
+                        "passes_aa_normal": wcag["passes_aa_normal"],
+                        "passes_aa_large": wcag["passes_aa_large"],
+                        "passes_aaa_normal": wcag["passes_aaa_normal"],
+                        "passes_aaa_large": wcag["passes_aaa_large"],
+                        "suggestions": suggestions
+                    })
             
-            region = img_array[y:y+region_h, x:x+region_w]
+            except Exception as e:
+                print(f"⚠️ OCR failed: {e}, falling back to region sampling")
+        
+        # Fallback: sample regions if OCR not available or failed
+        if not color_pairs:
+            print("📊 Sampling regions (OCR not available or failed)...")
+            sample_regions = min(20, (width * height) // 10000)
             
-            # Get dominant colors in region
-            pixels = region.reshape(-1, 3)
-            
-            # Simple clustering: find two most distinct colors
-            # Center pixel as foreground estimate
-            center_y, center_x = region_h // 2, region_w // 2
-            fg_color = tuple(pixels[center_y * region_w + center_x])
-            
-            # Average of edge pixels as background estimate
-            edge_pixels = np.concatenate([
-                region[0, :].reshape(-1, 3),  # top edge
-                region[-1, :].reshape(-1, 3),  # bottom edge
-                region[:, 0].reshape(-1, 3),  # left edge
-                region[:, -1].reshape(-1, 3)   # right edge
-            ])
-            bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
-            
-            # Calculate contrast
-            ratio = calculate_contrast_ratio(fg_color, bg_color)
-            wcag = evaluate_wcag(ratio)
-            
-            # Determine which is actually foreground (darker) and background (lighter)
-            fg_lum = calculate_luminance(*fg_color)
-            bg_lum = calculate_luminance(*bg_color)
-            
-            if fg_lum > bg_lum:
-                # Swap if we got it backwards
-                fg_color, bg_color = bg_color, fg_color
+            for i in range(sample_regions):
+                x = np.random.randint(0, max(1, width - 50))
+                y = np.random.randint(0, max(1, height - 50))
+                region_w = min(50, width - x)
+                region_h = min(50, height - y)
+                
+                region = img_array[y:y+region_h, x:x+region_w]
+                pixels = region.reshape(-1, 3)
+                
+                center_y, center_x = region_h // 2, region_w // 2
+                fg_color = tuple(pixels[center_y * region_w + center_x])
+                
+                edge_pixels = np.concatenate([
+                    region[0, :].reshape(-1, 3),
+                    region[-1, :].reshape(-1, 3),
+                    region[:, 0].reshape(-1, 3),
+                    region[:, -1].reshape(-1, 3)
+                ])
+                bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
+                
                 ratio = calculate_contrast_ratio(fg_color, bg_color)
                 wcag = evaluate_wcag(ratio)
-            
-            color_pairs.append({
-                "text_sample": f"Sample {i+1}",
-                "background": rgb_to_hex(*bg_color),
-                "foreground": rgb_to_hex(*fg_color),
-                "ratio": round(ratio, 1),
-                "passes_aa_normal": wcag["passes_aa_normal"],
-                "passes_aa_large": wcag["passes_aa_large"],
-                "passes_aaa_normal": wcag["passes_aaa_normal"],
-                "passes_aaa_large": wcag["passes_aaa_large"]
-            })
+                
+                fg_lum = calculate_luminance(*fg_color)
+                bg_lum = calculate_luminance(*bg_color)
+                
+                if fg_lum > bg_lum:
+                    fg_color, bg_color = bg_color, fg_color
+                    ratio = calculate_contrast_ratio(fg_color, bg_color)
+                    wcag = evaluate_wcag(ratio)
+                
+                bg_hex = rgb_to_hex(*bg_color)
+                fg_hex = rgb_to_hex(*fg_color)
+                
+                # Generate OKLCH suggestions if it doesn't pass
+                suggestions = []
+                target_ratio = 7.0 if wcag_level == "AAA" else 4.5
+                if not wcag["passes_aa_normal"]:
+                    suggestions = generate_oklch_suggestions(bg_hex, fg_hex, target_ratio)
+                
+                color_pairs.append({
+                    "text_sample": f"Sample {i+1}",
+                    "background": bg_hex,
+                    "foreground": fg_hex,
+                    "ratio": round(ratio, 1),
+                    "passes_aa_normal": wcag["passes_aa_normal"],
+                    "passes_aa_large": wcag["passes_aa_large"],
+                    "passes_aaa_normal": wcag["passes_aaa_normal"],
+                    "passes_aaa_large": wcag["passes_aaa_large"],
+                    "suggestions": suggestions
+                })
         
         # Remove duplicates and sort by ratio
         unique_pairs = {}
@@ -193,6 +385,28 @@ def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
         import traceback
         traceback.print_exc()
         # Return empty data on error
+        return {
+            "total_pairs": 0,
+            "passed_pairs": 0,
+            "failed_pairs": 0,
+            "color_pairs": []
+        }
+
+def analyze_image_colors(image_url: str, wcag_level: str = "AA"):
+    """Analyze color accessibility in an image from URL"""
+    try:
+        print(f"📥 Downloading image from: {image_url}")
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+        
+        print(f"✅ Image downloaded, size: {len(response.content)} bytes")
+        img = Image.open(BytesIO(response.content))
+        return analyze_image_colors_from_pil(img, wcag_level)
+        
+    except Exception as e:
+        print(f"❌ Error downloading/analyzing image: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {
             "total_pairs": 0,
             "passed_pairs": 0,
@@ -701,77 +915,8 @@ async def mcp_endpoint(request: Request):
                         img = img.resize(new_size, Image.Resampling.LANCZOS)
                         print(f"📐 Resized to: {new_size}")
                     
-                    img_array = np.array(img)
-                    height, width = img_array.shape[:2]
-                    print(f"🖼️ Image dimensions: {width}x{height}")
-                    
-                    # Sample regions to find color pairs
-                    color_pairs = []
-                    sample_regions = min(20, (width * height) // 10000)
-                    
-                    for i in range(sample_regions):
-                        x = np.random.randint(0, max(1, width - 50))
-                        y = np.random.randint(0, max(1, height - 50))
-                        region_w = min(50, width - x)
-                        region_h = min(50, height - y)
-                        
-                        region = img_array[y:y+region_h, x:x+region_w]
-                        pixels = region.reshape(-1, 3)
-                        
-                        center_y, center_x = region_h // 2, region_w // 2
-                        fg_color = tuple(pixels[center_y * region_w + center_x])
-                        
-                        edge_pixels = np.concatenate([
-                            region[0, :].reshape(-1, 3),
-                            region[-1, :].reshape(-1, 3),
-                            region[:, 0].reshape(-1, 3),
-                            region[:, -1].reshape(-1, 3)
-                        ])
-                        bg_color = tuple(np.mean(edge_pixels, axis=0).astype(int))
-                        
-                        ratio = calculate_contrast_ratio(fg_color, bg_color)
-                        wcag = evaluate_wcag(ratio)
-                        
-                        fg_lum = calculate_luminance(*fg_color)
-                        bg_lum = calculate_luminance(*bg_color)
-                        
-                        if fg_lum > bg_lum:
-                            fg_color, bg_color = bg_color, fg_color
-                            ratio = calculate_contrast_ratio(fg_color, bg_color)
-                            wcag = evaluate_wcag(ratio)
-                        
-                        color_pairs.append({
-                            "text_sample": f"Sample {i+1}",
-                            "background": rgb_to_hex(*bg_color),
-                            "foreground": rgb_to_hex(*fg_color),
-                            "ratio": round(ratio, 1),
-                            "passes_aa_normal": wcag["passes_aa_normal"],
-                            "passes_aa_large": wcag["passes_aa_large"],
-                            "passes_aaa_normal": wcag["passes_aaa_normal"],
-                            "passes_aaa_large": wcag["passes_aaa_large"]
-                        })
-                    
-                    # Remove duplicates
-                    unique_pairs = {}
-                    for pair in color_pairs:
-                        key = (pair["background"], pair["foreground"])
-                        if key not in unique_pairs or pair["ratio"] < unique_pairs[key]["ratio"]:
-                            unique_pairs[key] = pair
-                    
-                    color_pairs = list(unique_pairs.values())
-                    color_pairs.sort(key=lambda x: x["ratio"], reverse=True)
-                    
-                    passed_pairs = sum(1 for p in color_pairs if p["passes_aa_normal"])
-                    failed_pairs = len(color_pairs) - passed_pairs
-                    
-                    print(f"✅ Analysis complete: {len(color_pairs)} unique color pairs found")
-                    
-                    accessibility_data = {
-                        "total_pairs": len(color_pairs),
-                        "passed_pairs": passed_pairs,
-                        "failed_pairs": failed_pairs,
-                        "color_pairs": color_pairs[:15]
-                    }
+                    # Use the same analysis function
+                    accessibility_data = analyze_image_colors_from_pil(img, wcag_level)
                 finally:
                     # Clean up temp file
                     if os.path.exists(tmp_path):
