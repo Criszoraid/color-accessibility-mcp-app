@@ -357,13 +357,7 @@ async def mcp_endpoint(request: Request):
                     ],
                     "isError": False,
                     "structuredContent": {
-                        "data": accessibility_data,
-                        "_meta": {
-                            "openai/outputTemplate": {
-                                "type": "resource",
-                                "resource": "ui://widget/color-accessibility.html"
-                            }
-                        }
+                        "data": accessibility_data
                     },
                     "toolOutput": {
                         "accessibility": accessibility_data
