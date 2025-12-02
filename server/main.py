@@ -275,20 +275,20 @@ async def mcp_endpoint(request: Request):
                             "type": "resource",
                             "resource": {
                                 "uri": "ui://widget/color-accessibility.html",
-                                "mimeType": "text/html",
+                                "mimeType": "text/html+skybridge",
                                 "text": widget_html
                             }
                         }
                     ],
                     "isError": False,
-                    "_meta": {
-                        "openai/outputTemplate": {
-                            "type": "resource",
-                            "resource": "ui://widget/color-accessibility.html"
-                        }
-                    },
                     "structuredContent": {
-                        "data": accessibility_data
+                        "data": accessibility_data,
+                        "_meta": {
+                            "openai/outputTemplate": {
+                                "type": "resource",
+                                "resource": "ui://widget/color-accessibility.html"
+                            }
+                        }
                     },
                     "toolOutput": {
                         "accessibility": accessibility_data
