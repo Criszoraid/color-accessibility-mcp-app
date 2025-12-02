@@ -53,6 +53,9 @@ async def widget():
     
     return HTMLResponse(content=html_content)
 
+# Store generated widgets in memory
+WIDGET_CACHE = {}
+
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
     """MCP JSON-RPC 2.0 endpoint"""
@@ -98,9 +101,25 @@ async def mcp_endpoint(request: Request):
     
     elif method == "resources/read":
         uri = params.get("uri")
+        
+        # Check if we have a cached widget for this URI
+        if uri in WIDGET_CACHE:
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "text/html+skybridge",
+                            "text": WIDGET_CACHE[uri]
+                        }
+                    ]
+                }
+            })
+            
         if uri == "ui://widget/color-accessibility.html":
-            # Return a placeholder HTML for the resource
-            # The actual HTML with data will be returned in tools/call
+            # Return a placeholder HTML for the base resource
             placeholder_html = """
 <!DOCTYPE html>
 <html lang="en">
@@ -109,8 +128,9 @@ async def mcp_endpoint(request: Request):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Color Accessibility Widget</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; text-align: center; }
-        .placeholder { color: #6b7280; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; text-align: center; background: transparent; }
+        .placeholder { color: #6b7280; margin-top: 40px; }
+        h2 { color: #1a1a1a; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -188,7 +208,7 @@ async def mcp_endpoint(request: Request):
             wcag_level = arguments.get("wcag_level", "AA")
             
             # Log for debugging
-            print(f"🎨 Analyzing image: {image_url}")
+            print(f"🎨 Received request to analyze image: {image_url[:50]}...")
             print(f"📊 WCAG Level: {wcag_level}")
             
             # Mock data for demonstration
@@ -338,6 +358,12 @@ async def mcp_endpoint(request: Request):
 </html>
 """
             
+            # Generate unique URI for this analysis
+            widget_uri = f"ui://widget/analysis-{request_id}.html"
+            
+            # Store HTML in cache
+            WIDGET_CACHE[widget_uri] = widget_html
+            
             return JSONResponse({
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -350,7 +376,7 @@ async def mcp_endpoint(request: Request):
                         {
                             "type": "resource",
                             "resource": {
-                                "uri": f"ui://widget/analysis-{request_id}.html",
+                                "uri": widget_uri,
                                 "mimeType": "text/html+skybridge",
                                 "text": widget_html
                             }
@@ -358,7 +384,13 @@ async def mcp_endpoint(request: Request):
                     ],
                     "isError": False,
                     "structuredContent": {
-                        "data": accessibility_data
+                        "data": accessibility_data,
+                        "_meta": {
+                            "openai/outputTemplate": {
+                                "type": "resource",
+                                "resource": widget_uri
+                            }
+                        }
                     },
                     "toolOutput": {
                         "accessibility": accessibility_data
