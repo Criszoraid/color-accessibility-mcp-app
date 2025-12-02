@@ -67,6 +67,14 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
     """Generate OKLCH color suggestions to improve contrast"""
     suggestions = []
     
+    # Normalize hex colors
+    bg_hex = bg_hex.strip().upper()
+    fg_hex = fg_hex.strip().upper()
+    if not bg_hex.startswith('#'):
+        bg_hex = '#' + bg_hex
+    if not fg_hex.startswith('#'):
+        fg_hex = '#' + fg_hex
+    
     try:
         from coloraide import Color
         
@@ -76,72 +84,89 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
         
         bg_oklch = bg_color.convert('oklch')
         fg_oklch = fg_color.convert('oklch')
-        print(f"    ✅ OKLCH conversion successful")
+        print(f"    ✅ OKLCH conversion successful (bg L={bg_oklch.lightness:.2f}, fg L={fg_oklch.lightness:.2f})")
         
-        # Option 1: Lighten background
-        for delta in [0.1, 0.2, 0.3, 0.4, 0.5]:
-            new_bg_oklch = bg_oklch.clone()
-            new_bg_oklch.set('lightness', min(1.0, bg_oklch.lightness + delta))
-            new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
-            new_bg_rgb = hex_to_rgb(new_bg_hex)
-            fg_rgb = hex_to_rgb(fg_hex)
+        # Option 1: Lighten background (if background is dark)
+        if bg_oklch.lightness < 0.7:  # Only if background is relatively dark
+            for delta in [0.15, 0.25, 0.35, 0.45, 0.55]:
+                try:
+                    new_bg_oklch = bg_oklch.clone()
+                    new_lightness = min(0.95, bg_oklch.lightness + delta)
+                    new_bg_oklch.set('lightness', new_lightness)
+                    new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
+                    new_bg_rgb = hex_to_rgb(new_bg_hex)
+                    fg_rgb = hex_to_rgb(fg_hex)
+                    
+                    ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
+                    if ratio >= target_ratio:
+                        suggestion = {
+                            "type": "lighten_bg",
+                            "background_oklch": new_bg_oklch.to_string(),
+                            "foreground_oklch": fg_oklch.to_string(),
+                            "new_contrast_ratio": round(ratio, 1),
+                            "preview_hex_bg": new_bg_hex,
+                            "preview_hex_fg": fg_hex
+                        }
+                        suggestions.append(suggestion)
+                        print(f"    ✅ Found lighten_bg suggestion: {new_bg_hex} → {ratio:.2f}:1")
+                        break
+                except Exception as e:
+                    print(f"    ⚠️ Error in lighten_bg delta {delta}: {e}")
+                    continue
+        
+        # Option 2: Darken background (if background is light)
+        if bg_oklch.lightness > 0.3:  # Only if background is relatively light
+            for delta in [-0.15, -0.25, -0.35, -0.45, -0.55]:
+                try:
+                    new_bg_oklch = bg_oklch.clone()
+                    new_lightness = max(0.05, bg_oklch.lightness + delta)
+                    new_bg_oklch.set('lightness', new_lightness)
+                    new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
+                    new_bg_rgb = hex_to_rgb(new_bg_hex)
+                    fg_rgb = hex_to_rgb(fg_hex)
+                    
+                    ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
+                    if ratio >= target_ratio:
+                        suggestion = {
+                            "type": "darken_bg",
+                            "background_oklch": new_bg_oklch.to_string(),
+                            "foreground_oklch": fg_oklch.to_string(),
+                            "new_contrast_ratio": round(ratio, 1),
+                            "preview_hex_bg": new_bg_hex,
+                            "preview_hex_fg": fg_hex
+                        }
+                        suggestions.append(suggestion)
+                        print(f"    ✅ Found darken_bg suggestion: {new_bg_hex} → {ratio:.2f}:1")
+                        break
+                except Exception as e:
+                    print(f"    ⚠️ Error in darken_bg delta {delta}: {e}")
+                    continue
+        
+        # Option 3: Adjust foreground (make it more contrasting)
+        # If foreground is light, make it darker; if dark, make it lighter
+        fg_delta = -0.4 if fg_oklch.lightness > 0.5 else 0.4
+        try:
+            new_fg_oklch = fg_oklch.clone()
+            new_lightness = max(0.05, min(0.95, fg_oklch.lightness + fg_delta))
+            new_fg_oklch.set('lightness', new_lightness)
+            new_fg_hex = new_fg_oklch.convert('srgb').to_string(hex=True, fit=True)
+            new_fg_rgb = hex_to_rgb(new_fg_hex)
+            bg_rgb = hex_to_rgb(bg_hex)
             
-            ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
+            ratio = calculate_contrast_ratio(bg_rgb, new_fg_rgb)
             if ratio >= target_ratio:
                 suggestion = {
-                    "type": "lighten_bg",
-                    "background_oklch": new_bg_oklch.to_string(),
-                    "foreground_oklch": fg_oklch.to_string(),
+                    "type": "adjust_fg",
+                    "background_oklch": bg_oklch.to_string(),
+                    "foreground_oklch": new_fg_oklch.to_string(),
                     "new_contrast_ratio": round(ratio, 1),
-                    "preview_hex_bg": new_bg_hex,
-                    "preview_hex_fg": fg_hex
+                    "preview_hex_bg": bg_hex,
+                    "preview_hex_fg": new_fg_hex
                 }
                 suggestions.append(suggestion)
-                print(f"    ✅ Found lighten_bg suggestion: {new_bg_hex} → {ratio:.2f}:1")
-                break
-        
-        # Option 2: Darken background
-        for delta in [-0.1, -0.2, -0.3, -0.4, -0.5]:
-            new_bg_oklch = bg_oklch.clone()
-            new_bg_oklch.set('lightness', max(0.0, bg_oklch.lightness + delta))
-            new_bg_hex = new_bg_oklch.convert('srgb').to_string(hex=True, fit=True)
-            new_bg_rgb = hex_to_rgb(new_bg_hex)
-            fg_rgb = hex_to_rgb(fg_hex)
-            
-            ratio = calculate_contrast_ratio(new_bg_rgb, fg_rgb)
-            if ratio >= target_ratio:
-                suggestion = {
-                    "type": "darken_bg",
-                    "background_oklch": new_bg_oklch.to_string(),
-                    "foreground_oklch": fg_oklch.to_string(),
-                    "new_contrast_ratio": round(ratio, 1),
-                    "preview_hex_bg": new_bg_hex,
-                    "preview_hex_fg": fg_hex
-                }
-                suggestions.append(suggestion)
-                print(f"    ✅ Found darken_bg suggestion: {new_bg_hex} → {ratio:.2f}:1")
-                break
-        
-        # Option 3: Adjust foreground
-        fg_delta = -0.3 if fg_oklch.lightness > 0.5 else 0.3
-        new_fg_oklch = fg_oklch.clone()
-        new_fg_oklch.set('lightness', max(0.0, min(1.0, fg_oklch.lightness + fg_delta)))
-        new_fg_hex = new_fg_oklch.convert('srgb').to_string(hex=True, fit=True)
-        new_fg_rgb = hex_to_rgb(new_fg_hex)
-        bg_rgb = hex_to_rgb(bg_hex)
-        
-        ratio = calculate_contrast_ratio(bg_rgb, new_fg_rgb)
-        if ratio >= target_ratio:
-            suggestion = {
-                "type": "adjust_fg",
-                "background_oklch": bg_oklch.to_string(),
-                "foreground_oklch": new_fg_oklch.to_string(),
-                "new_contrast_ratio": round(ratio, 1),
-                "preview_hex_bg": bg_hex,
-                "preview_hex_fg": new_fg_hex
-            }
-            suggestions.append(suggestion)
-            print(f"    ✅ Found adjust_fg suggestion: {new_fg_hex} → {ratio:.2f}:1")
+                print(f"    ✅ Found adjust_fg suggestion: {new_fg_hex} → {ratio:.2f}:1")
+        except Exception as e:
+            print(f"    ⚠️ Error in adjust_fg: {e}")
     
     except ImportError as e:
         print(f"❌ ERROR: coloraide not installed or import failed: {e}")
@@ -150,6 +175,9 @@ def generate_oklch_suggestions(bg_hex, fg_hex, target_ratio=4.5):
         print(f"⚠️ Error generating OKLCH suggestions: {e}")
         import traceback
         traceback.print_exc()
+    
+    if len(suggestions) == 0:
+        print(f"    ⚠️ No suggestions found - may need more aggressive adjustments")
     
     return suggestions
 
