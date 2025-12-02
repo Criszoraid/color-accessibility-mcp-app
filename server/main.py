@@ -264,8 +264,6 @@ async def mcp_endpoint(request: Request):
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
             padding: 16px; 
             background: transparent;
-            max-height: 600px;
-            overflow-y: auto;
         }}
         .container {{ 
             max-width: 100%; 
