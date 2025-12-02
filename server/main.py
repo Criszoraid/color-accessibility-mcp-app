@@ -803,7 +803,17 @@ async def mcp_endpoint(request: Request):
         document.getElementById('passing-count').textContent = '0';
         document.getElementById('failing-count').textContent = '0';
         document.getElementById('texts-count').textContent = '0';
-        document.getElementById('colors-content').innerHTML = '<div class="empty-state"><p>No color pairs found in the image</p></div>';
+        
+        // Show error message if available
+        let errorMessage = 'No color pairs found in the image';
+        if (data && data.error) {
+          errorMessage = 'Error: ' + data.error;
+          if (data.suggestion) {
+            errorMessage += '<br><br>' + data.suggestion;
+          }
+        }
+        
+        document.getElementById('colors-content').innerHTML = '<div class="empty-state"><p>' + errorMessage + '</p></div>';
         return;
       }
       
@@ -1147,13 +1157,21 @@ async def mcp_endpoint(request: Request):
                     print(f"❌ Error processing base64 image: {e}")
                     import traceback
                     traceback.print_exc()
-                    # Return error data
+                    
+                    # Check if error is due to truncated image
+                    error_msg = str(e)
+                    suggestion = ""
+                    if "too small" in error_msg.lower() or "truncated" in error_msg.lower():
+                        suggestion = "💡 Tip: For large images, try using a public URL instead of uploading directly. Use the 'analyze_url_accessibility' tool with an image URL."
+                    
+                    # Return error data with helpful message
                     accessibility_data = {
                         "total_pairs": 0,
                         "passed_pairs": 0,
                         "failed_pairs": 0,
                         "color_pairs": [],
-                        "error": f"Error processing image: {str(e)}"
+                        "error": f"Error processing image: {error_msg}",
+                        "suggestion": suggestion
                     }
             else:
                 # Analyze from URL
@@ -1407,7 +1425,17 @@ async def mcp_endpoint(request: Request):
         document.getElementById('passing-count').textContent = '0';
         document.getElementById('failing-count').textContent = '0';
         document.getElementById('texts-count').textContent = '0';
-        document.getElementById('colors-content').innerHTML = '<div class="empty-state"><p>No color pairs found in the image</p></div>';
+        
+        // Show error message if available
+        let errorMessage = 'No color pairs found in the image';
+        if (data && data.error) {
+          errorMessage = 'Error: ' + data.error;
+          if (data.suggestion) {
+            errorMessage += '<br><br>' + data.suggestion;
+          }
+        }
+        
+        document.getElementById('colors-content').innerHTML = '<div class="empty-state"><p>' + errorMessage + '</p></div>';
         return;
       }
       
