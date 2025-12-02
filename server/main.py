@@ -22,8 +22,12 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 # Serve static files from dist directory
 dist_path = Path(__file__).parent.parent / "web" / "dist"
-if dist_path.exists():
-    app.mount("/assets", StaticFiles(directory=str(dist_path / "assets")), name="assets")
+assets_path = dist_path / "assets"
+
+if assets_path.exists():
+    app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+else:
+    print(f"⚠️ Warning: Assets directory not found at {assets_path}. Widget may not display correctly.")
 
 @app.get("/")
 async def root():
@@ -203,7 +207,7 @@ async def mcp_endpoint(request: Request):
                             "type": "resource",
                             "resource": {
                                 "uri": "ui://widget/color-accessibility.html",
-                                "mimeType": "text/html+skybridge",
+                                "mimeType": "text/html",
                                 "text": widget_html
                             }
                         }
