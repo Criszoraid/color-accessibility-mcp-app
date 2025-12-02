@@ -182,17 +182,81 @@ async def mcp_endpoint(request: Request):
                 ]
             }
             
-            # Read the widget HTML
-            widget_html_path = dist_path / "index.html"
-            if widget_html_path.exists():
-                with open(widget_html_path, "r") as f:
-                    widget_html = f.read()
-                
-                # Replace relative paths with absolute URLs
-                widget_html = widget_html.replace('href="/', f'href="{BASE_URL}/')
-                widget_html = widget_html.replace('src="/', f'src="{BASE_URL}/')
-            else:
-                widget_html = "<h1>Widget not built</h1>"
+            # Create self-contained widget HTML
+            widget_html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Accessibility Results</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 800px; margin: 0 auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+        h1 {{ color: #1a1a1a; margin-bottom: 20px; font-size: 24px; }}
+        .summary {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }}
+        .stat-card {{ background: #f8f9fa; padding: 16px; border-radius: 8px; text-align: center; }}
+        .stat-value {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
+        .stat-label {{ font-size: 14px; color: #6b7280; margin-top: 4px; }}
+        .color-pair {{ background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px; }}
+        .pair-header {{ font-weight: 600; margin-bottom: 12px; color: #374151; }}
+        .color-preview {{ display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }}
+        .color-swatch {{ width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }}
+        .ratio-badge {{ display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: 600; }}
+        .ratio-badge.pass {{ background: #dcfce7; color: #166534; }}
+        .ratio-badge.fail {{ background: #fee2e2; color: #991b1b; }}
+        .wcag-levels {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+        .wcag-badge {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; }}
+        .wcag-badge.pass {{ background: #dcfce7; color: #166534; }}
+        .wcag-badge.fail {{ background: #fee2e2; color: #991b1b; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Color Accessibility Analysis</h1>
+        
+        <div class="summary">
+            <div class="stat-card">
+                <div class="stat-value">{accessibility_data['total_pairs']}</div>
+                <div class="stat-label">Total Pairs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="color: #16a34a;">{accessibility_data['passed_pairs']}</div>
+                <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="color: #dc2626;">{accessibility_data['failed_pairs']}</div>
+                <div class="stat-label">Failed</div>
+            </div>
+        </div>
+        
+        <div class="color-pairs">
+            {''.join([f'''
+            <div class="color-pair">
+                <div class="pair-header">{pair.get('text_sample', 'Color Pair')}</div>
+                <div class="color-preview">
+                    <div class="color-swatch" style="background: {pair['background']}; color: {pair['foreground']};">Aa</div>
+                    <div>
+                        <div><strong>Contrast Ratio:</strong> {pair['ratio']}:1</div>
+                        <div class="ratio-badge {'pass' if pair['passes_aa_normal'] else 'fail'}">
+                            {'✓ WCAG AA' if pair['passes_aa_normal'] else '✗ WCAG AA'}
+                        </div>
+                    </div>
+                </div>
+                <div class="wcag-levels">
+                    <span class="wcag-badge {'pass' if pair['passes_aa_normal'] else 'fail'}">AA Normal: {'✓' if pair['passes_aa_normal'] else '✗'}</span>
+                    <span class="wcag-badge {'pass' if pair['passes_aa_large'] else 'fail'}">AA Large: {'✓' if pair['passes_aa_large'] else '✗'}</span>
+                    <span class="wcag-badge {'pass' if pair['passes_aaa_normal'] else 'fail'}">AAA Normal: {'✓' if pair['passes_aaa_normal'] else '✗'}</span>
+                    <span class="wcag-badge {'pass' if pair['passes_aaa_large'] else 'fail'}">AAA Large: {'✓' if pair['passes_aaa_large'] else '✗'}</span>
+                </div>
+            </div>
+            ''' for pair in accessibility_data['color_pairs']])}
+        </div>
+    </div>
+</body>
+</html>
+"""
             
             return JSONResponse({
                 "jsonrpc": "2.0",
@@ -218,6 +282,9 @@ async def mcp_endpoint(request: Request):
                             "type": "resource",
                             "resource": "ui://widget/color-accessibility.html"
                         }
+                    },
+                    "structuredContent": {
+                        "data": accessibility_data
                     },
                     "toolOutput": {
                         "accessibility": accessibility_data
