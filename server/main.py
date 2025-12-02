@@ -924,37 +924,70 @@ async def mcp_endpoint(request: Request):
             # Handle data URL (base64) from ChatGPT
             if image_url and image_url.startswith("data:image"):
                 print("📥 Processing data URL (base64 image)")
-                # Extract base64 data
-                header, encoded = image_url.split(',', 1)
-                import base64
-                image_data = base64.b64decode(encoded)
-                
-                # Save to temporary file or process directly
-                from tempfile import NamedTemporaryFile
-                import os
-                with NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
-                    tmp_file.write(image_data)
-                    tmp_path = tmp_file.name
-                
                 try:
-                    # Process the image
-                    img = Image.open(tmp_path)
-                    img = img.convert('RGB')
+                    # Extract base64 data
+                    if ',' not in image_url:
+                        raise ValueError("Invalid data URL format: no comma found")
                     
-                    # Resize if too large
-                    max_size = 1000
-                    if img.width > max_size or img.height > max_size:
-                        ratio = min(max_size / img.width, max_size / img.height)
-                        new_size = (int(img.width * ratio), int(img.height * ratio))
-                        img = img.resize(new_size, Image.Resampling.LANCZOS)
-                        print(f"📐 Resized to: {new_size}")
+                    header, encoded = image_url.split(',', 1)
+                    print(f"📝 Data URL header: {header[:50]}...")
+                    print(f"📝 Base64 length: {len(encoded)} characters")
+                    
+                    import base64
+                    try:
+                        image_data = base64.b64decode(encoded, validate=True)
+                        print(f"✅ Decoded {len(image_data)} bytes from base64")
+                    except Exception as e:
+                        print(f"❌ Base64 decode error: {e}")
+                        raise ValueError(f"Invalid base64 data: {e}")
+                    
+                    # Validate image data
+                    if len(image_data) < 100:
+                        raise ValueError(f"Image data too small: {len(image_data)} bytes")
+                    
+                    # Try to open image directly from bytes first (more reliable)
+                    try:
+                        img = Image.open(BytesIO(image_data))
+                        # Force load to validate image
+                        img.load()
+                        print(f"✅ Image loaded successfully: {img.format}, {img.size}, {img.mode}")
+                    except Exception as e:
+                        print(f"⚠️ Direct load failed: {e}, trying temp file...")
+                        # Fallback to temp file
+                        from tempfile import NamedTemporaryFile
+                        import os
+                        with NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+                            tmp_file.write(image_data)
+                            tmp_path = tmp_file.name
+                        
+                        try:
+                            img = Image.open(tmp_path)
+                            img.load()  # Force load to validate
+                            print(f"✅ Image loaded from temp file: {img.format}, {img.size}, {img.mode}")
+                        finally:
+                            # Clean up temp file
+                            if os.path.exists(tmp_path):
+                                os.unlink(tmp_path)
+                    
+                    # Convert to RGB
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
                     
                     # Use the same analysis function
                     accessibility_data = analyze_image_colors_from_pil(img, wcag_level)
-                finally:
-                    # Clean up temp file
-                    if os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
+                    
+                except Exception as e:
+                    print(f"❌ Error processing base64 image: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Return error data
+                    accessibility_data = {
+                        "total_pairs": 0,
+                        "passed_pairs": 0,
+                        "failed_pairs": 0,
+                        "color_pairs": [],
+                        "error": f"Error processing image: {str(e)}"
+                    }
             else:
                 # Analyze from URL
                 print(f"📥 Processing image URL")
