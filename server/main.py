@@ -20,14 +20,12 @@ app.add_middleware(
 # Get base URL from environment or default
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
-# Serve static files from dist directory
+# Serve static files from dist directory if they exist (optional)
 dist_path = Path(__file__).parent.parent / "web" / "dist"
 assets_path = dist_path / "assets"
 
 if assets_path.exists():
     app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
-else:
-    print(f"⚠️ Warning: Assets directory not found at {assets_path}. Widget may not display correctly.")
 
 @app.get("/")
 async def root():
@@ -102,25 +100,8 @@ async def mcp_endpoint(request: Request):
     elif method == "resources/read":
         uri = params.get("uri")
         
-        # Check if we have a cached widget for this URI
-        if uri in WIDGET_CACHE:
-            return JSONResponse({
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {
-                    "contents": [
-                        {
-                            "uri": uri,
-                            "mimeType": "text/html+skybridge",
-                            "text": WIDGET_CACHE[uri]
-                        }
-                    ]
-                }
-            })
-            
-        if uri == "ui://widget/color-accessibility.html":
-            # Return a placeholder HTML for the base resource
-            placeholder_html = """
+        # Static HTML template with client-side rendering logic
+        widget_html = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,19 +109,121 @@ async def mcp_endpoint(request: Request):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Color Accessibility Widget</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; text-align: center; background: transparent; }
-        .placeholder { color: #6b7280; margin-top: 40px; }
-        h2 { color: #1a1a1a; margin-bottom: 10px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+            padding: 16px; 
+            background: transparent;
+            min-height: 600px;
+        }
+        .container { 
+            max-width: 100%; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 8px; 
+            padding: 20px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+        }
+        h1 { color: #1a1a1a; margin-bottom: 16px; font-size: 20px; }
+        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; }
+        .stat-value { font-size: 28px; font-weight: bold; color: #2563eb; }
+        .stat-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
+        .color-pair { background: #f8f9fa; padding: 14px; border-radius: 6px; margin-bottom: 12px; }
+        .pair-header { font-weight: 600; margin-bottom: 12px; color: #374151; }
+        .color-preview { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+        .color-swatch { width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }
+        .ratio-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: 600; }
+        .ratio-badge.pass { background: #dcfce7; color: #166534; }
+        .ratio-badge.fail { background: #fee2e2; color: #991b1b; }
+        .wcag-levels { display: flex; gap: 8px; flex-wrap: wrap; }
+        .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .wcag-badge.pass { background: #dcfce7; color: #166534; }
+        .wcag-badge.fail { background: #fee2e2; color: #991b1b; }
+        
+        #loading { text-align: center; padding: 40px; color: #6b7280; }
+        #content { display: none; }
     </style>
 </head>
 <body>
-    <div class="placeholder">
-        <h2>🎨 Color Accessibility Checker</h2>
-        <p>Upload an image to analyze color accessibility</p>
+    <div class="container">
+        <h1>🎨 Color Accessibility Analysis</h1>
+        
+        <div id="loading">
+            <p>Waiting for analysis data...</p>
+        </div>
+
+        <div id="content">
+            <div class="summary">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-pairs">-</div>
+                    <div class="stat-label">Total Pairs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="passed-pairs" style="color: #16a34a;">-</div>
+                    <div class="stat-label">Passed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="failed-pairs" style="color: #dc2626;">-</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+            </div>
+            
+            <div id="color-pairs-list" class="color-pairs">
+                <!-- Pairs will be injected here -->
+            </div>
+        </div>
     </div>
+
+    <script>
+        function renderData(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            
+            document.getElementById('total-pairs').textContent = data.total_pairs;
+            document.getElementById('passed-pairs').textContent = data.passed_pairs;
+            document.getElementById('failed-pairs').textContent = data.failed_pairs;
+            
+            const list = document.getElementById('color-pairs-list');
+            list.innerHTML = data.color_pairs.map(pair => `
+                <div class="color-pair">
+                    <div class="pair-header">${pair.text_sample || 'Color Pair'}</div>
+                    <div class="color-preview">
+                        <div class="color-swatch" style="background: ${pair.background}; color: ${pair.foreground};">Aa</div>
+                        <div>
+                            <div><strong>Contrast Ratio:</strong> ${pair.ratio}:1</div>
+                            <div class="ratio-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">
+                                ${pair.passes_aa_normal ? '✓ WCAG AA' : '✗ WCAG AA'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="wcag-levels">
+                        <span class="wcag-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">AA Normal: ${pair.passes_aa_normal ? '✓' : '✗'}</span>
+                        <span class="wcag-badge ${pair.passes_aa_large ? 'pass' : 'fail'}">AA Large: ${pair.passes_aa_large ? '✓' : '✗'}</span>
+                        <span class="wcag-badge ${pair.passes_aaa_normal ? 'pass' : 'fail'}">AAA Normal: ${pair.passes_aaa_normal ? '✓' : '✗'}</span>
+                        <span class="wcag-badge ${pair.passes_aaa_large ? 'pass' : 'fail'}">AAA Large: ${pair.passes_aaa_large ? '✓' : '✗'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Listen for data from ChatGPT
+        window.addEventListener('openai:set_globals', (event) => {
+            if (event.detail && event.detail.globals && event.detail.globals.toolOutput && event.detail.globals.toolOutput.accessibility) {
+                renderData(event.detail.globals.toolOutput.accessibility);
+            }
+        });
+
+        // Also check if data is already available on window.openai
+        if (window.openai && window.openai.toolOutput && window.openai.toolOutput.accessibility) {
+            renderData(window.openai.toolOutput.accessibility);
+        }
+    </script>
 </body>
 </html>
 """
+        
+        if uri == "ui://widget/color-accessibility.html":
             return JSONResponse({
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -149,7 +232,7 @@ async def mcp_endpoint(request: Request):
                         {
                             "uri": uri,
                             "mimeType": "text/html+skybridge",
-                            "text": placeholder_html
+                            "text": widget_html
                         }
                     ]
                 }
@@ -203,166 +286,174 @@ async def mcp_endpoint(request: Request):
         arguments = params.get("arguments", {})
         
         if tool_name == "analyze_color_accessibility":
-            # Get the image URL from arguments
-            image_url = arguments.get("image_url", "")
+            image_url = arguments.get("image_url")
             wcag_level = arguments.get("wcag_level", "AA")
             
-            # Log for debugging
             print(f"🎨 Received request to analyze image: {image_url[:50]}...")
             print(f"📊 WCAG Level: {wcag_level}")
             
             # Mock data for demonstration
-            # TODO: In production, download the image from image_url and analyze it
-            # You can use libraries like: Pillow, opencv-python, pytesseract
             accessibility_data = {
-                "image_url": image_url,
-                "wcag_level": wcag_level,
-                "total_pairs": 3,
-                "passed_pairs": 1,
-                "failed_pairs": 2,
+                "total_pairs": 12,
+                "passed_pairs": 5,
+                "failed_pairs": 7,
                 "color_pairs": [
                     {
+                        "text_sample": "Header Text",
+                        "background": "#ffffff",
                         "foreground": "#000000",
-                        "background": "#FFFFFF",
                         "ratio": 21.0,
                         "passes_aa_normal": True,
                         "passes_aa_large": True,
                         "passes_aaa_normal": True,
-                        "passes_aaa_large": True,
-                        "text_sample": "Example text"
+                        "passes_aaa_large": True
                     },
                     {
-                        "foreground": "#777777",
-                        "background": "#FFFFFF",
-                        "ratio": 4.47,
+                        "text_sample": "Button Text",
+                        "background": "#3b82f6",
+                        "foreground": "#ffffff",
+                        "ratio": 3.5,
                         "passes_aa_normal": False,
                         "passes_aa_large": True,
                         "passes_aaa_normal": False,
-                        "passes_aaa_large": False,
-                        "text_sample": "Low contrast text",
-                        "suggestions": {
-                            "darken_bg": [
-                                {"color": "#555555", "ratio": 5.2, "oklch": "oklch(0.45 0.02 264)"}
-                            ],
-                            "adjust_fg": [
-                                {"color": "#333333", "ratio": 7.1, "oklch": "oklch(0.35 0.01 264)"}
-                            ]
-                        }
+                        "passes_aaa_large": False
                     },
                     {
-                        "foreground": "#FF0000",
-                        "background": "#FFFF00",
-                        "ratio": 2.3,
+                        "text_sample": "Footer Link",
+                        "background": "#1f2937",
+                        "foreground": "#4b5563",
+                        "ratio": 2.8,
                         "passes_aa_normal": False,
                         "passes_aa_large": False,
                         "passes_aaa_normal": False,
-                        "passes_aaa_large": False,
-                        "text_sample": "Very low contrast",
-                        "suggestions": {
-                            "lighten_bg": [
-                                {"color": "#FFFFCC", "ratio": 3.5, "oklch": "oklch(0.95 0.05 110)"}
-                            ],
-                            "darken_bg": [
-                                {"color": "#CC9900", "ratio": 4.8, "oklch": "oklch(0.65 0.15 85)"}
-                            ]
-                        }
+                        "passes_aaa_large": False
                     }
                 ]
             }
             
-            # Create self-contained widget HTML
-            widget_html = f"""
+            # We need to redefine widget_html here because it's scoped to resources/read above
+            # In a real app, this would be a shared constant or template file
+            widget_html = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Accessibility Results</title>
+    <title>Color Accessibility Widget</title>
     <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
             padding: 16px; 
             background: transparent;
             min-height: 600px;
-        }}
-        .container {{ 
+        }
+        .container { 
             max-width: 100%; 
             margin: 0 auto; 
             background: white; 
             border-radius: 8px; 
             padding: 20px; 
             box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
-        }}
-        h1 {{ color: #1a1a1a; margin-bottom: 16px; font-size: 20px; }}
-        .summary {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }}
-        .stat-card {{ background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; }}
-        .stat-value {{ font-size: 28px; font-weight: bold; color: #2563eb; }}
-        .stat-label {{ font-size: 12px; color: #6b7280; margin-top: 4px; }}
-        .color-pair {{ background: #f8f9fa; padding: 14px; border-radius: 6px; margin-bottom: 12px; }}
-        .pair-header {{ font-weight: 600; margin-bottom: 12px; color: #374151; }}
-        .color-preview {{ display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }}
-        .color-swatch {{ width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }}
-        .ratio-badge {{ display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: 600; }}
-        .ratio-badge.pass {{ background: #dcfce7; color: #166534; }}
-        .ratio-badge.fail {{ background: #fee2e2; color: #991b1b; }}
-        .wcag-levels {{ display: flex; gap: 8px; flex-wrap: wrap; }}
-        .wcag-badge {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; }}
-        .wcag-badge.pass {{ background: #dcfce7; color: #166534; }}
-        .wcag-badge.fail {{ background: #fee2e2; color: #991b1b; }}
+        }
+        h1 { color: #1a1a1a; margin-bottom: 16px; font-size: 20px; }
+        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; }
+        .stat-value { font-size: 28px; font-weight: bold; color: #2563eb; }
+        .stat-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
+        .color-pair { background: #f8f9fa; padding: 14px; border-radius: 6px; margin-bottom: 12px; }
+        .pair-header { font-weight: 600; margin-bottom: 12px; color: #374151; }
+        .color-preview { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+        .color-swatch { width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }
+        .ratio-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: 600; }
+        .ratio-badge.pass { background: #dcfce7; color: #166534; }
+        .ratio-badge.fail { background: #fee2e2; color: #991b1b; }
+        .wcag-levels { display: flex; gap: 8px; flex-wrap: wrap; }
+        .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .wcag-badge.pass { background: #dcfce7; color: #166534; }
+        .wcag-badge.fail { background: #fee2e2; color: #991b1b; }
+        
+        #loading { text-align: center; padding: 40px; color: #6b7280; }
+        #content { display: none; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎨 Color Accessibility Analysis</h1>
         
-        <div class="summary">
-            <div class="stat-card">
-                <div class="stat-value">{accessibility_data['total_pairs']}</div>
-                <div class="stat-label">Total Pairs</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" style="color: #16a34a;">{accessibility_data['passed_pairs']}</div>
-                <div class="stat-label">Passed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" style="color: #dc2626;">{accessibility_data['failed_pairs']}</div>
-                <div class="stat-label">Failed</div>
-            </div>
+        <div id="loading">
+            <p>Waiting for analysis data...</p>
         </div>
-        
-        <div class="color-pairs">
-            {''.join([f'''
-            <div class="color-pair">
-                <div class="pair-header">{pair.get('text_sample', 'Color Pair')}</div>
-                <div class="color-preview">
-                    <div class="color-swatch" style="background: {pair['background']}; color: {pair['foreground']};">Aa</div>
-                    <div>
-                        <div><strong>Contrast Ratio:</strong> {pair['ratio']}:1</div>
-                        <div class="ratio-badge {'pass' if pair['passes_aa_normal'] else 'fail'}">
-                            {'✓ WCAG AA' if pair['passes_aa_normal'] else '✗ WCAG AA'}
-                        </div>
-                    </div>
+
+        <div id="content">
+            <div class="summary">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-pairs">-</div>
+                    <div class="stat-label">Total Pairs</div>
                 </div>
-                <div class="wcag-levels">
-                    <span class="wcag-badge {'pass' if pair['passes_aa_normal'] else 'fail'}">AA Normal: {'✓' if pair['passes_aa_normal'] else '✗'}</span>
-                    <span class="wcag-badge {'pass' if pair['passes_aa_large'] else 'fail'}">AA Large: {'✓' if pair['passes_aa_large'] else '✗'}</span>
-                    <span class="wcag-badge {'pass' if pair['passes_aaa_normal'] else 'fail'}">AAA Normal: {'✓' if pair['passes_aaa_normal'] else '✗'}</span>
-                    <span class="wcag-badge {'pass' if pair['passes_aaa_large'] else 'fail'}">AAA Large: {'✓' if pair['passes_aaa_large'] else '✗'}</span>
+                <div class="stat-card">
+                    <div class="stat-value" id="passed-pairs" style="color: #16a34a;">-</div>
+                    <div class="stat-label">Passed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="failed-pairs" style="color: #dc2626;">-</div>
+                    <div class="stat-label">Failed</div>
                 </div>
             </div>
-            ''' for pair in accessibility_data['color_pairs']])}
+            
+            <div id="color-pairs-list" class="color-pairs">
+                <!-- Pairs will be injected here -->
+            </div>
         </div>
     </div>
+
+    <script>
+        function renderData(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            
+            document.getElementById('total-pairs').textContent = data.total_pairs;
+            document.getElementById('passed-pairs').textContent = data.passed_pairs;
+            document.getElementById('failed-pairs').textContent = data.failed_pairs;
+            
+            const list = document.getElementById('color-pairs-list');
+            list.innerHTML = data.color_pairs.map(pair => `
+                <div class="color-pair">
+                    <div class="pair-header">${pair.text_sample || 'Color Pair'}</div>
+                    <div class="color-preview">
+                        <div class="color-swatch" style="background: ${pair.background}; color: ${pair.foreground};">Aa</div>
+                        <div>
+                            <div><strong>Contrast Ratio:</strong> ${pair.ratio}:1</div>
+                            <div class="ratio-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">
+                                ${pair.passes_aa_normal ? '✓ WCAG AA' : '✗ WCAG AA'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="wcag-levels">
+                        <span class="wcag-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">AA Normal: ${pair.passes_aa_normal ? '✓' : '✗'}</span>
+                        <span class="wcag-badge ${pair.passes_aa_large ? 'pass' : 'fail'}">AA Large: ${pair.passes_aa_large ? '✓' : '✗'}</span>
+                        <span class="wcag-badge ${pair.passes_aaa_normal ? 'pass' : 'fail'}">AAA Normal: ${pair.passes_aaa_normal ? '✓' : '✗'}</span>
+                        <span class="wcag-badge ${pair.passes_aaa_large ? 'pass' : 'fail'}">AAA Large: ${pair.passes_aaa_large ? '✓' : '✗'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Listen for data from ChatGPT
+        window.addEventListener('openai:set_globals', (event) => {
+            if (event.detail && event.detail.globals && event.detail.globals.toolOutput && event.detail.globals.toolOutput.accessibility) {
+                renderData(event.detail.globals.toolOutput.accessibility);
+            }
+        });
+
+        // Also check if data is already available on window.openai
+        if (window.openai && window.openai.toolOutput && window.openai.toolOutput.accessibility) {
+            renderData(window.openai.toolOutput.accessibility);
+        }
+    </script>
 </body>
 </html>
 """
-            
-            # Generate unique URI for this analysis
-            widget_uri = f"ui://widget/analysis-{request_id}.html"
-            
-            # Store HTML in cache
-            WIDGET_CACHE[widget_uri] = widget_html
             
             return JSONResponse({
                 "jsonrpc": "2.0",
@@ -376,7 +467,7 @@ async def mcp_endpoint(request: Request):
                         {
                             "type": "resource",
                             "resource": {
-                                "uri": widget_uri,
+                                "uri": "ui://widget/color-accessibility.html",
                                 "mimeType": "text/html+skybridge",
                                 "text": widget_html
                             }
@@ -388,7 +479,7 @@ async def mcp_endpoint(request: Request):
                         "_meta": {
                             "openai/outputTemplate": {
                                 "type": "resource",
-                                "resource": widget_uri
+                                "resource": "ui://widget/color-accessibility.html"
                             }
                         }
                     },
