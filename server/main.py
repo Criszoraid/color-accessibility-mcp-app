@@ -101,139 +101,250 @@ async def mcp_endpoint(request: Request):
         uri = params.get("uri")
         
         # Static HTML template with client-side rendering logic
+        # Using the improved UI from web/ui-template.html
         widget_html = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Accessibility Widget</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            padding: 16px; 
-            background: transparent;
-            min-height: 600px;
-        }
-        .container { 
-            max-width: 100%; 
-            margin: 0 auto; 
-            background: white; 
-            border-radius: 8px; 
-            padding: 20px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
-        }
-        h1 { color: #1a1a1a; margin-bottom: 16px; font-size: 20px; }
-        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-        .stat-card { background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; }
-        .stat-value { font-size: 28px; font-weight: bold; color: #2563eb; }
-        .stat-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
-        .color-pair { background: #f8f9fa; padding: 14px; border-radius: 6px; margin-bottom: 12px; }
-        .pair-header { font-weight: 600; margin-bottom: 12px; color: #374151; }
-        .color-preview { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
-        .color-swatch { width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }
-        .ratio-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: 600; }
-        .ratio-badge.pass { background: #dcfce7; color: #166534; }
-        .ratio-badge.fail { background: #fee2e2; color: #991b1b; }
-        .wcag-levels { display: flex; gap: 8px; flex-wrap: wrap; }
-        .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-        .wcag-badge.pass { background: #dcfce7; color: #166534; }
-        .wcag-badge.fail { background: #fee2e2; color: #991b1b; }
-        
-        #loading { text-align: center; padding: 40px; color: #6b7280; }
-        #content { display: none; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Accessibility Checker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: transparent; padding: 20px; min-height: 600px; }
+    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07); }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .header h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 8px; color: #1d1d1f; }
+    .share-btn { background: #f0f0f0; border: none; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 18px; }
+    .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+    .summary-card { background: #f8f8f8; border-radius: 12px; padding: 24px; text-align: center; }
+    .summary-icon { font-size: 32px; margin-bottom: 8px; }
+    .summary-value { font-size: 32px; font-weight: 700; margin-bottom: 4px; color: #1d1d1f; }
+    .summary-label { font-size: 14px; color: #86868b; text-transform: capitalize; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .tab { flex: 1; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .tab.active { background: #007AFF; color: white; }
+    .tab:not(.active) { background: #f0f0f0; color: #1d1d1f; }
+    .tab:not(.active):hover { background: #e5e5e5; }
+    .color-pairs-list { display: flex; flex-direction: column; gap: 24px; }
+    .color-pair-card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px; }
+    .pair-header { font-size: 14px; color: #86868b; margin-bottom: 12px; font-weight: 500; }
+    .color-preview-section { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+    .color-preview { flex: 1; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; border: 1px solid rgba(0, 0, 0, 0.1); }
+    .ratio-info { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .ratio-badge { background: #34C759; color: white; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+    .ratio-badge.fail { background: #FF3B30; }
+    .ratio-value { font-size: 20px; font-weight: 600; color: #1d1d1f; }
+    .color-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .color-code { font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; padding: 8px 12px; background: #f5f5f5; border-radius: 6px; color: #1d1d1f; }
+    .color-code-label { font-size: 11px; color: #86868b; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; }
+    .suggestions-section { border-top: 1px solid #e5e5e5; padding-top: 20px; margin-top: 16px; }
+    .suggestions-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .suggestions-header h4 { font-size: 14px; font-weight: 600; color: #1d1d1f; }
+    .fail-badge { background: #FF3B30; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .suggestions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .suggestion-card { border: 2px solid #34C759; border-radius: 10px; padding: 16px; background: #f9fff9; }
+    .suggestion-preview { height: 60px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; margin-bottom: 12px; border: 1px solid rgba(0, 0, 0, 0.1); }
+    .suggestion-badge { background: #34C759; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+    .suggestion-type { font-size: 11px; color: #86868b; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+    .suggestion-color { font-family: 'Monaco', 'Courier New', monospace; font-size: 11px; background: white; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; color: #1d1d1f; }
+    .suggestion-ratio { font-size: 13px; font-weight: 600; color: #34C759; margin-top: 6px; }
+    .wcag-levels { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .wcag-badge.pass { background: #d1f4e0; color: #0f6537; }
+    .wcag-badge.fail { background: #ffe5e5; color: #c41e3a; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #86868b; }
+    .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+    #loading { text-align: center; padding: 60px 20px; color: #86868b; }
+    #content { display: none; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎨 Color Accessibility Analysis</h1>
-        
-        <div id="loading">
-            <p>Waiting for analysis data...</p>
-        </div>
-
-        <div id="content">
-            <div class="summary">
-                <div class="stat-card">
-                    <div class="stat-value" id="total-pairs">-</div>
-                    <div class="stat-label">Total Pairs</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="passed-pairs" style="color: #16a34a;">-</div>
-                    <div class="stat-label">Passed</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="failed-pairs" style="color: #dc2626;">-</div>
-                    <div class="stat-label">Failed</div>
-                </div>
-            </div>
-            
-            <div id="color-pairs-list" class="color-pairs">
-                <!-- Pairs will be injected here -->
-            </div>
-        </div>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>Color Accessibility Checker 🎨✅</h1>
+      <button class="share-btn">📤</button>
     </div>
 
-    <script>
-        function renderData(data) {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').style.display = 'block';
-            
-            document.getElementById('total-pairs').textContent = data.total_pairs;
-            document.getElementById('passed-pairs').textContent = data.passed_pairs;
-            document.getElementById('failed-pairs').textContent = data.failed_pairs;
-            
-            const list = document.getElementById('color-pairs-list');
-            list.innerHTML = data.color_pairs.map(pair => `
-                <div class="color-pair">
-                    <div class="pair-header">${pair.text_sample || 'Color Pair'}</div>
-                    <div class="color-preview">
-                        <div class="color-swatch" style="background: ${pair.background}; color: ${pair.foreground};">Aa</div>
-                        <div>
-                            <div><strong>Contrast Ratio:</strong> ${pair.ratio}:1</div>
-                            <div class="ratio-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">
-                                ${pair.passes_aa_normal ? '✓ WCAG AA' : '✗ WCAG AA'}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="wcag-levels">
-                        <span class="wcag-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">AA Normal: ${pair.passes_aa_normal ? '✓' : '✗'}</span>
-                        <span class="wcag-badge ${pair.passes_aa_large ? 'pass' : 'fail'}">AA Large: ${pair.passes_aa_large ? '✓' : '✗'}</span>
-                        <span class="wcag-badge ${pair.passes_aaa_normal ? 'pass' : 'fail'}">AAA Normal: ${pair.passes_aaa_normal ? '✓' : '✗'}</span>
-                        <span class="wcag-badge ${pair.passes_aaa_large ? 'pass' : 'fail'}">AAA Large: ${pair.passes_aaa_large ? '✓' : '✗'}</span>
-                    </div>
+    <div id="loading">
+        <p>Waiting for analysis data...</p>
+    </div>
+
+    <div id="content">
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+        <div class="summary-card">
+            <div class="summary-icon">✅</div>
+            <div class="summary-value" id="passing-count">0</div>
+            <div class="summary-label">Passing</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-icon">❌</div>
+            <div class="summary-value" id="failing-count">0</div>
+            <div class="summary-label">Failures</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-icon">👁️</div>
+            <div class="summary-value" id="texts-count">0</div>
+            <div class="summary-label">Texts</div>
+        </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+        <button class="tab active" onclick="showTab('colors')">Colors</button>
+        <button class="tab" onclick="showTab('vision')">Vision</button>
+        </div>
+
+        <!-- Content -->
+        <div id="colors-content" class="color-pairs-list">
+        <!-- Color pairs will be injected here -->
+        </div>
+
+        <div id="vision-content" style="display: none;">
+        <div class="empty-state">
+            <div class="empty-state-icon">👁️</div>
+            <p>Vision simulation coming soon...</p>
+        </div>
+        </div>
+    </div>
+  </div>
+
+  <script>
+    function showTab(tabName) {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      document.getElementById('colors-content').style.display = 
+        tabName === 'colors' ? 'flex' : 'none';
+      document.getElementById('vision-content').style.display = 
+        tabName === 'vision' ? 'block' : 'none';
+    }
+
+    function getWCAGBadge(level, passes) {
+      return `<span class="wcag-badge ${passes ? 'pass' : 'fail'}">${level}: ${passes ? '✓' : '✗'}</span>`;
+    }
+
+    function renderColorPair(pair) {
+      const suggestionTypeLabels = {
+        lighten_bg: 'Lighten Background',
+        darken_bg: 'Darken Background',
+        adjust_fg: 'Adjust Foreground'
+      };
+
+      // Handle suggestions if they exist (assuming future implementation)
+      const suggestions = pair.suggestions || [];
+      
+      const suggestionsHTML = suggestions.length > 0 ? `
+        <div class="suggestions-section">
+          <div class="suggestions-header">
+            <span class="fail-badge">Fail</span>
+            <h4>OKLCH Suggestions</h4>
+          </div>
+          <div class="suggestions-grid">
+            ${suggestions.map(sugg => `
+              <div class="suggestion-card">
+                <div class="suggestion-preview" style="background: ${sugg.preview_hex_bg}; color: ${sugg.preview_hex_fg};">
+                  Aa
                 </div>
-            `).join('');
-        }
+                <div class="suggestion-badge">✅ Fixed</div>
+                <div class="suggestion-type">${suggestionTypeLabels[sugg.type] || sugg.type}</div>
+                <div class="suggestion-color">${sugg.background_oklch}</div>
+                <div class="suggestion-color">${sugg.foreground_oklch}</div>
+                <div class="suggestion-ratio">Ratio: ${sugg.new_contrast_ratio}:1</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
 
-        // Listen for data from ChatGPT
-        window.addEventListener('openai:set_globals', (event) => {
-            const globals = event.detail?.globals;
-            if (!globals) return;
+      // Determine status based on passes_aa_normal (or other logic)
+      const isPass = pair.passes_aa_normal;
+      const statusLabel = isPass ? 'Pass' : 'Fail';
+
+      return `
+        <div class="color-pair-card">
+          <div class="pair-header">Original ${pair.text_sample ? `"${pair.text_sample}"` : ''}</div>
+          
+          <div class="color-preview-section">
+            <div class="color-preview" style="background: ${pair.background}; color: ${pair.foreground};">
+              Aa
+            </div>
             
-            // Try to find the data in likely locations
-            if (globals.data) {
-                renderData(globals.data);
-            } else if (globals.accessibility) {
-                renderData(globals.accessibility);
-            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
-                renderData(globals.toolOutput.accessibility);
-            }
-        });
+            <div class="ratio-info">
+              <div class="ratio-badge ${isPass ? '' : 'fail'}">
+                ${statusLabel}
+              </div>
+              <div class="ratio-value">Ratio: ${pair.ratio}:1</div>
+            </div>
+          </div>
 
-        // Also check if data is already available on window.openai
-        if (window.openai) {
-            const globals = window.openai;
-            if (globals.data) {
-                renderData(globals.data);
-            } else if (globals.accessibility) {
-                renderData(globals.accessibility);
-            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
-                renderData(globals.toolOutput.accessibility);
-            }
+          <div class="color-codes">
+            <div>
+              <div class="color-code-label">Background</div>
+              <div class="color-code">${pair.background}</div>
+            </div>
+            <div>
+              <div class="color-code-label">Foreground</div>
+              <div class="color-code">${pair.foreground}</div>
+            </div>
+          </div>
+
+          <div class="wcag-levels">
+            ${getWCAGBadge('AA Normal', pair.passes_aa_normal)}
+            ${getWCAGBadge('AA Large', pair.passes_aa_large)}
+            ${getWCAGBadge('AAA Normal', pair.passes_aaa_normal)}
+            ${getWCAGBadge('AAA Large', pair.passes_aaa_large)}
+          </div>
+
+          ${suggestionsHTML}
+        </div>
+      `;
+    }
+
+    function renderResults(data) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      // Update summary
+      document.getElementById('passing-count').textContent = data.passed_pairs;
+      document.getElementById('failing-count').textContent = data.failed_pairs;
+      document.getElementById('texts-count').textContent = data.total_pairs;
+
+      // Render color pairs
+      const container = document.getElementById('colors-content');
+      container.innerHTML = data.color_pairs.map(pair => renderColorPair(pair)).join('');
+    }
+
+    // Listen for data from ChatGPT
+    window.addEventListener('openai:set_globals', (event) => {
+        const globals = event.detail?.globals;
+        if (!globals) return;
+        
+        if (globals.data) {
+            renderResults(globals.data);
+        } else if (globals.accessibility) {
+            renderResults(globals.accessibility);
+        } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            renderResults(globals.toolOutput.accessibility);
         }
-    </script>
+    });
+
+    // Also check if data is already available on window.openai
+    if (window.openai) {
+        const globals = window.openai;
+        if (globals.data) {
+            renderResults(globals.data);
+        } else if (globals.accessibility) {
+            renderResults(globals.accessibility);
+        } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            renderResults(globals.toolOutput.accessibility);
+        }
+    }
+  </script>
 </body>
 </html>
 """
@@ -352,135 +463,245 @@ async def mcp_endpoint(request: Request):
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Accessibility Widget</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            padding: 16px; 
-            background: transparent;
-            min-height: 600px;
-        }
-        .container { 
-            max-width: 100%; 
-            margin: 0 auto; 
-            background: white; 
-            border-radius: 8px; 
-            padding: 20px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
-        }
-        h1 { color: #1a1a1a; margin-bottom: 16px; font-size: 20px; }
-        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-        .stat-card { background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center; }
-        .stat-value { font-size: 28px; font-weight: bold; color: #2563eb; }
-        .stat-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
-        .color-pair { background: #f8f9fa; padding: 14px; border-radius: 6px; margin-bottom: 12px; }
-        .pair-header { font-weight: 600; margin-bottom: 12px; color: #374151; }
-        .color-preview { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
-        .color-swatch { width: 80px; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; border: 2px solid #e5e7eb; }
-        .ratio-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: 600; }
-        .ratio-badge.pass { background: #dcfce7; color: #166534; }
-        .ratio-badge.fail { background: #fee2e2; color: #991b1b; }
-        .wcag-levels { display: flex; gap: 8px; flex-wrap: wrap; }
-        .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-        .wcag-badge.pass { background: #dcfce7; color: #166534; }
-        .wcag-badge.fail { background: #fee2e2; color: #991b1b; }
-        
-        #loading { text-align: center; padding: 40px; color: #6b7280; }
-        #content { display: none; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Accessibility Checker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: transparent; padding: 20px; min-height: 600px; }
+    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07); }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .header h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 8px; color: #1d1d1f; }
+    .share-btn { background: #f0f0f0; border: none; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 18px; }
+    .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+    .summary-card { background: #f8f8f8; border-radius: 12px; padding: 24px; text-align: center; }
+    .summary-icon { font-size: 32px; margin-bottom: 8px; }
+    .summary-value { font-size: 32px; font-weight: 700; margin-bottom: 4px; color: #1d1d1f; }
+    .summary-label { font-size: 14px; color: #86868b; text-transform: capitalize; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .tab { flex: 1; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .tab.active { background: #007AFF; color: white; }
+    .tab:not(.active) { background: #f0f0f0; color: #1d1d1f; }
+    .tab:not(.active):hover { background: #e5e5e5; }
+    .color-pairs-list { display: flex; flex-direction: column; gap: 24px; }
+    .color-pair-card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px; }
+    .pair-header { font-size: 14px; color: #86868b; margin-bottom: 12px; font-weight: 500; }
+    .color-preview-section { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+    .color-preview { flex: 1; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; border: 1px solid rgba(0, 0, 0, 0.1); }
+    .ratio-info { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .ratio-badge { background: #34C759; color: white; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+    .ratio-badge.fail { background: #FF3B30; }
+    .ratio-value { font-size: 20px; font-weight: 600; color: #1d1d1f; }
+    .color-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .color-code { font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; padding: 8px 12px; background: #f5f5f5; border-radius: 6px; color: #1d1d1f; }
+    .color-code-label { font-size: 11px; color: #86868b; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; }
+    .suggestions-section { border-top: 1px solid #e5e5e5; padding-top: 20px; margin-top: 16px; }
+    .suggestions-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .suggestions-header h4 { font-size: 14px; font-weight: 600; color: #1d1d1f; }
+    .fail-badge { background: #FF3B30; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .suggestions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .suggestion-card { border: 2px solid #34C759; border-radius: 10px; padding: 16px; background: #f9fff9; }
+    .suggestion-preview { height: 60px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; margin-bottom: 12px; border: 1px solid rgba(0, 0, 0, 0.1); }
+    .suggestion-badge { background: #34C759; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+    .suggestion-type { font-size: 11px; color: #86868b; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+    .suggestion-color { font-family: 'Monaco', 'Courier New', monospace; font-size: 11px; background: white; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; color: #1d1d1f; }
+    .suggestion-ratio { font-size: 13px; font-weight: 600; color: #34C759; margin-top: 6px; }
+    .wcag-levels { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .wcag-badge.pass { background: #d1f4e0; color: #0f6537; }
+    .wcag-badge.fail { background: #ffe5e5; color: #c41e3a; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #86868b; }
+    .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+    #loading { text-align: center; padding: 60px 20px; color: #86868b; }
+    #content { display: none; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎨 Color Accessibility Analysis</h1>
-        
-        <div id="loading">
-            <p>Waiting for analysis data...</p>
-        </div>
-
-        <div id="content">
-            <div class="summary">
-                <div class="stat-card">
-                    <div class="stat-value" id="total-pairs">-</div>
-                    <div class="stat-label">Total Pairs</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="passed-pairs" style="color: #16a34a;">-</div>
-                    <div class="stat-label">Passed</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="failed-pairs" style="color: #dc2626;">-</div>
-                    <div class="stat-label">Failed</div>
-                </div>
-            </div>
-            
-            <div id="color-pairs-list" class="color-pairs">
-                <!-- Pairs will be injected here -->
-            </div>
-        </div>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>Color Accessibility Checker 🎨✅</h1>
+      <button class="share-btn">📤</button>
     </div>
 
-    <script>
-        function renderData(data) {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').style.display = 'block';
-            
-            document.getElementById('total-pairs').textContent = data.total_pairs;
-            document.getElementById('passed-pairs').textContent = data.passed_pairs;
-            document.getElementById('failed-pairs').textContent = data.failed_pairs;
-            
-            const list = document.getElementById('color-pairs-list');
-            list.innerHTML = data.color_pairs.map(pair => `
-                <div class="color-pair">
-                    <div class="pair-header">${pair.text_sample || 'Color Pair'}</div>
-                    <div class="color-preview">
-                        <div class="color-swatch" style="background: ${pair.background}; color: ${pair.foreground};">Aa</div>
-                        <div>
-                            <div><strong>Contrast Ratio:</strong> ${pair.ratio}:1</div>
-                            <div class="ratio-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">
-                                ${pair.passes_aa_normal ? '✓ WCAG AA' : '✗ WCAG AA'}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="wcag-levels">
-                        <span class="wcag-badge ${pair.passes_aa_normal ? 'pass' : 'fail'}">AA Normal: ${pair.passes_aa_normal ? '✓' : '✗'}</span>
-                        <span class="wcag-badge ${pair.passes_aa_large ? 'pass' : 'fail'}">AA Large: ${pair.passes_aa_large ? '✓' : '✗'}</span>
-                        <span class="wcag-badge ${pair.passes_aaa_normal ? 'pass' : 'fail'}">AAA Normal: ${pair.passes_aaa_normal ? '✓' : '✗'}</span>
-                        <span class="wcag-badge ${pair.passes_aaa_large ? 'pass' : 'fail'}">AAA Large: ${pair.passes_aaa_large ? '✓' : '✗'}</span>
-                    </div>
+    <div id="loading">
+        <p>Waiting for analysis data...</p>
+    </div>
+
+    <div id="content">
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+        <div class="summary-card">
+            <div class="summary-icon">✅</div>
+            <div class="summary-value" id="passing-count">0</div>
+            <div class="summary-label">Passing</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-icon">❌</div>
+            <div class="summary-value" id="failing-count">0</div>
+            <div class="summary-label">Failures</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-icon">👁️</div>
+            <div class="summary-value" id="texts-count">0</div>
+            <div class="summary-label">Texts</div>
+        </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+        <button class="tab active" onclick="showTab('colors')">Colors</button>
+        <button class="tab" onclick="showTab('vision')">Vision</button>
+        </div>
+
+        <!-- Content -->
+        <div id="colors-content" class="color-pairs-list">
+        <!-- Color pairs will be injected here -->
+        </div>
+
+        <div id="vision-content" style="display: none;">
+        <div class="empty-state">
+            <div class="empty-state-icon">👁️</div>
+            <p>Vision simulation coming soon...</p>
+        </div>
+        </div>
+    </div>
+  </div>
+
+  <script>
+    function showTab(tabName) {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      document.getElementById('colors-content').style.display = 
+        tabName === 'colors' ? 'flex' : 'none';
+      document.getElementById('vision-content').style.display = 
+        tabName === 'vision' ? 'block' : 'none';
+    }
+
+    function getWCAGBadge(level, passes) {
+      return `<span class="wcag-badge ${passes ? 'pass' : 'fail'}">${level}: ${passes ? '✓' : '✗'}</span>`;
+    }
+
+    function renderColorPair(pair) {
+      const suggestionTypeLabels = {
+        lighten_bg: 'Lighten Background',
+        darken_bg: 'Darken Background',
+        adjust_fg: 'Adjust Foreground'
+      };
+
+      // Handle suggestions if they exist (assuming future implementation)
+      const suggestions = pair.suggestions || [];
+      
+      const suggestionsHTML = suggestions.length > 0 ? `
+        <div class="suggestions-section">
+          <div class="suggestions-header">
+            <span class="fail-badge">Fail</span>
+            <h4>OKLCH Suggestions</h4>
+          </div>
+          <div class="suggestions-grid">
+            ${suggestions.map(sugg => `
+              <div class="suggestion-card">
+                <div class="suggestion-preview" style="background: ${sugg.preview_hex_bg}; color: ${sugg.preview_hex_fg};">
+                  Aa
                 </div>
-            `).join('');
-        }
+                <div class="suggestion-badge">✅ Fixed</div>
+                <div class="suggestion-type">${suggestionTypeLabels[sugg.type] || sugg.type}</div>
+                <div class="suggestion-color">${sugg.background_oklch}</div>
+                <div class="suggestion-color">${sugg.foreground_oklch}</div>
+                <div class="suggestion-ratio">Ratio: ${sugg.new_contrast_ratio}:1</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
 
-        // Listen for data from ChatGPT
-        window.addEventListener('openai:set_globals', (event) => {
-            const globals = event.detail?.globals;
-            if (!globals) return;
+      // Determine status based on passes_aa_normal (or other logic)
+      const isPass = pair.passes_aa_normal;
+      const statusLabel = isPass ? 'Pass' : 'Fail';
+
+      return `
+        <div class="color-pair-card">
+          <div class="pair-header">Original ${pair.text_sample ? `"${pair.text_sample}"` : ''}</div>
+          
+          <div class="color-preview-section">
+            <div class="color-preview" style="background: ${pair.background}; color: ${pair.foreground};">
+              Aa
+            </div>
             
-            // Try to find the data in likely locations
-            if (globals.data) {
-                renderData(globals.data);
-            } else if (globals.accessibility) {
-                renderData(globals.accessibility);
-            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
-                renderData(globals.toolOutput.accessibility);
-            }
-        });
+            <div class="ratio-info">
+              <div class="ratio-badge ${isPass ? '' : 'fail'}">
+                ${statusLabel}
+              </div>
+              <div class="ratio-value">Ratio: ${pair.ratio}:1</div>
+            </div>
+          </div>
 
-        // Also check if data is already available on window.openai
-        if (window.openai) {
-            const globals = window.openai;
-            if (globals.data) {
-                renderData(globals.data);
-            } else if (globals.accessibility) {
-                renderData(globals.accessibility);
-            } else if (globals.toolOutput && globals.toolOutput.accessibility) {
-                renderData(globals.toolOutput.accessibility);
-            }
+          <div class="color-codes">
+            <div>
+              <div class="color-code-label">Background</div>
+              <div class="color-code">${pair.background}</div>
+            </div>
+            <div>
+              <div class="color-code-label">Foreground</div>
+              <div class="color-code">${pair.foreground}</div>
+            </div>
+          </div>
+
+          <div class="wcag-levels">
+            ${getWCAGBadge('AA Normal', pair.passes_aa_normal)}
+            ${getWCAGBadge('AA Large', pair.passes_aa_large)}
+            ${getWCAGBadge('AAA Normal', pair.passes_aaa_normal)}
+            ${getWCAGBadge('AAA Large', pair.passes_aaa_large)}
+          </div>
+
+          ${suggestionsHTML}
+        </div>
+      `;
+    }
+
+    function renderResults(data) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      // Update summary
+      document.getElementById('passing-count').textContent = data.passed_pairs;
+      document.getElementById('failing-count').textContent = data.failed_pairs;
+      document.getElementById('texts-count').textContent = data.total_pairs;
+
+      // Render color pairs
+      const container = document.getElementById('colors-content');
+      container.innerHTML = data.color_pairs.map(pair => renderColorPair(pair)).join('');
+    }
+
+    // Listen for data from ChatGPT
+    window.addEventListener('openai:set_globals', (event) => {
+        const globals = event.detail?.globals;
+        if (!globals) return;
+        
+        if (globals.data) {
+            renderResults(globals.data);
+        } else if (globals.accessibility) {
+            renderResults(globals.accessibility);
+        } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            renderResults(globals.toolOutput.accessibility);
         }
-    </script>
+    });
+
+    // Also check if data is already available on window.openai
+    if (window.openai) {
+        const globals = window.openai;
+        if (globals.data) {
+            renderResults(globals.data);
+        } else if (globals.accessibility) {
+            renderResults(globals.accessibility);
+        } else if (globals.toolOutput && globals.toolOutput.accessibility) {
+            renderResults(globals.toolOutput.accessibility);
+        }
+    }
+  </script>
 </body>
 </html>
 """
