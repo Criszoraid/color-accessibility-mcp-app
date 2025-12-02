@@ -266,7 +266,7 @@ async def mcp_endpoint(request: Request):
             background: transparent;
         }}
         .container {{ 
-            max-width: 100%; 
+            max-width: 1200px; 
             margin: 0 auto; 
             background: white; 
             border-radius: 8px; 
