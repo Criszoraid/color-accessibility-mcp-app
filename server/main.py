@@ -412,8 +412,8 @@ async def widget():
       </div>
     </div>
     <div class="tabs">
-      <button class="tab active" onclick="showTab('colors')">Colors</button>
-      <button class="tab" onclick="showTab('vision')">Vision</button>
+      <button class="tab active" onclick="showTab('colors', event)">Colors</button>
+      <button class="tab" onclick="showTab('vision', event)">Vision</button>
     </div>
     <div id="colors-content" class="color-pairs-list"></div>
     <div id="vision-content" style="display: none;">
@@ -465,9 +465,18 @@ async def widget():
         }
       ]
     };
-    function showTab(tabName) {
+    function showTab(tabName, event) {
       document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-      event.target.classList.add('active');
+      if (event && event.target) {
+        event.target.classList.add('active');
+      } else {
+        document.querySelectorAll('.tab').forEach(tab => {
+          if ((tabName === 'colors' && tab.textContent.includes('Colors')) || 
+              (tabName === 'vision' && tab.textContent.includes('Vision'))) {
+            tab.classList.add('active');
+          }
+        });
+      }
       document.getElementById('colors-content').style.display = tabName === 'colors' ? 'flex' : 'none';
       document.getElementById('vision-content').style.display = tabName === 'vision' ? 'block' : 'none';
     }
