@@ -338,105 +338,205 @@ async def root():
 @app.get("/widget")
 async def widget():
     """Serve the widget HTML with static demo data for preview"""
-    # Load the more complete template from web/ui-template.html
-    template_path = Path(__file__).parent.parent / "web" / "ui-template.html"
-    
-    if template_path.exists():
-        with open(template_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        
-        # Create realistic sample data for demo
-        sample_data = {
-            "summary": {
-                "total_pairs": 4,
-                "passing_pairs": 2,
-                "failing_pairs": 2,
-                "detected_texts": 5
+    # Complete HTML with embedded demo data - no external file dependencies
+    html_content = """<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Accessibility Checker - Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f7; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07); }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .header h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+    .summary-card { background: #f8f8f8; border-radius: 12px; padding: 24px; text-align: center; }
+    .summary-icon { font-size: 32px; margin-bottom: 8px; }
+    .summary-value { font-size: 32px; font-weight: 700; margin-bottom: 4px; }
+    .summary-label { font-size: 14px; color: #86868b; text-transform: capitalize; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .tab { flex: 1; padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .tab.active { background: #007AFF; color: white; }
+    .tab:not(.active) { background: #f0f0f0; color: #1d1d1f; }
+    .color-pairs-list { display: flex; flex-direction: column; gap: 24px; }
+    .color-pair-card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 20px; }
+    .pair-header { font-size: 14px; color: #86868b; margin-bottom: 12px; font-weight: 500; }
+    .color-preview-section { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+    .color-preview { flex: 1; height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; border: 1px solid rgba(0,0,0,0.1); }
+    .ratio-info { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .ratio-badge { background: #34C759; color: white; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+    .ratio-badge.fail { background: #FF3B30; }
+    .ratio-value { font-size: 20px; font-weight: 600; color: #1d1d1f; }
+    .color-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .color-code { font-family: 'Monaco', 'Courier New', monospace; font-size: 13px; padding: 8px 12px; background: #f5f5f5; border-radius: 6px; }
+    .color-code-label { font-size: 11px; color: #86868b; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; }
+    .suggestions-section { border-top: 1px solid #e5e5e5; padding-top: 20px; margin-top: 16px; }
+    .suggestions-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .suggestions-header h4 { font-size: 14px; font-weight: 600; color: #1d1d1f; }
+    .fail-badge { background: #FF3B30; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .suggestions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .suggestion-card { border: 2px solid #34C759; border-radius: 10px; padding: 16px; background: #f9fff9; }
+    .suggestion-preview { height: 60px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.1); }
+    .suggestion-badge { background: #34C759; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+    .suggestion-type { font-size: 11px; color: #86868b; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+    .suggestion-color { font-family: 'Monaco', 'Courier New', monospace; font-size: 11px; background: white; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; color: #1d1d1f; }
+    .suggestion-ratio { font-size: 13px; font-weight: 600; color: #34C759; margin-top: 6px; }
+    .wcag-levels { display: flex; gap: 8px; margin-top: 8px; }
+    .wcag-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .wcag-badge.pass { background: #d1f4e0; color: #0f6537; }
+    .wcag-badge.fail { background: #ffe5e5; color: #c41e3a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎨 Color Accessibility Checker</h1>
+    </div>
+    <div class="summary-cards">
+      <div class="summary-card">
+        <div class="summary-icon">✅</div>
+        <div class="summary-value" id="passing-count">2</div>
+        <div class="summary-label">Passing</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-icon">❌</div>
+        <div class="summary-value" id="failing-count">2</div>
+        <div class="summary-label">Failures</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-icon">👁️</div>
+        <div class="summary-value" id="texts-count">4</div>
+        <div class="summary-label">Texts</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('colors')">Colors</button>
+      <button class="tab" onclick="showTab('vision')">Vision</button>
+    </div>
+    <div id="colors-content" class="color-pairs-list"></div>
+    <div id="vision-content" style="display: none;">
+      <div style="text-align: center; padding: 60px 20px; color: #86868b;">
+        <div style="font-size: 48px; margin-bottom: 16px;">👁️</div>
+        <p>Vision simulation coming soon...</p>
+      </div>
+    </div>
+  </div>
+  <script>
+    const sampleData = {
+      summary: { total_pairs: 4, passing_pairs: 2, failing_pairs: 2, detected_texts: 4 },
+      color_pairs: [
+        {
+          id: "pair-0", text: "Título Principal", background: "#FFFFFF", foreground: "#333333",
+          contrast_ratio: 12.63, wcag_aa: { normal_text: true, large_text: true },
+          wcag_aaa: { normal_text: true, large_text: true }, status: "pass", suggestions: []
+        },
+        {
+          id: "pair-1", text: "Botón de Acción", background: "#0066CC", foreground: "#FFFFFF",
+          contrast_ratio: 7.12, wcag_aa: { normal_text: true, large_text: true },
+          wcag_aaa: { normal_text: true, large_text: true }, status: "pass", suggestions: []
+        },
+        {
+          id: "pair-2", text: "Texto Secundario", background: "#F5F5F5", foreground: "#999999",
+          contrast_ratio: 2.85, wcag_aa: { normal_text: false, large_text: false },
+          wcag_aaa: { normal_text: false, large_text: false }, status: "fail",
+          suggestions: [
+            {
+              type: "darken_bg", background_oklch: "oklch(0.75 0.01 264)", foreground_oklch: "oklch(0.45 0.01 264)",
+              new_contrast_ratio: 4.6, preview_hex_bg: "#D0D0D0", preview_hex_fg: "#999999"
             },
-            "color_pairs": [
-                {
-                    "id": "pair-0",
-                    "text": "Título Principal",
-                    "background": "#FFFFFF",
-                    "foreground": "#333333",
-                    "contrast_ratio": 12.63,
-                    "wcag_aa": {"normal_text": True, "large_text": True},
-                    "wcag_aaa": {"normal_text": True, "large_text": True},
-                    "status": "pass",
-                    "suggestions": []
-                },
-                {
-                    "id": "pair-1",
-                    "text": "Botón de Acción",
-                    "background": "#0066CC",
-                    "foreground": "#FFFFFF",
-                    "contrast_ratio": 7.12,
-                    "wcag_aa": {"normal_text": True, "large_text": True},
-                    "wcag_aaa": {"normal_text": True, "large_text": True},
-                    "status": "pass",
-                    "suggestions": []
-                },
-                {
-                    "id": "pair-2",
-                    "text": "Texto Secundario",
-                    "background": "#F5F5F5",
-                    "foreground": "#999999",
-                    "contrast_ratio": 2.85,
-                    "wcag_aa": {"normal_text": False, "large_text": False},
-                    "wcag_aaa": {"normal_text": False, "large_text": False},
-                    "status": "fail",
-                    "suggestions": [
-                        {
-                            "type": "darken_bg",
-                            "background_oklch": "oklch(0.75 0.01 264)",
-                            "foreground_oklch": "oklch(0.45 0.01 264)",
-                            "new_contrast_ratio": 4.6,
-                            "preview_hex_bg": "#D0D0D0",
-                            "preview_hex_fg": "#999999"
-                        },
-                        {
-                            "type": "adjust_fg",
-                            "background_oklch": "oklch(0.93 0.01 264)",
-                            "foreground_oklch": "oklch(0.35 0.01 264)",
-                            "new_contrast_ratio": 7.8,
-                            "preview_hex_bg": "#F5F5F5",
-                            "preview_hex_fg": "#4A4A4A"
-                        }
-                    ]
-                },
-                {
-                    "id": "pair-3",
-                    "text": "Enlace de Navegación",
-                    "background": "#E8E8E8",
-                    "foreground": "#0066CC",
-                    "contrast_ratio": 3.2,
-                    "wcag_aa": {"normal_text": False, "large_text": True},
-                    "wcag_aaa": {"normal_text": False, "large_text": False},
-                    "status": "fail",
-                    "suggestions": [
-                        {
-                            "type": "darken_bg",
-                            "background_oklch": "oklch(0.65 0.01 264)",
-                            "foreground_oklch": "oklch(0.45 0.15 264)",
-                            "new_contrast_ratio": 5.2,
-                            "preview_hex_bg": "#B0B0B0",
-                            "preview_hex_fg": "#0066CC"
-                        }
-                    ]
-                }
-            ]
+            {
+              type: "adjust_fg", background_oklch: "oklch(0.93 0.01 264)", foreground_oklch: "oklch(0.35 0.01 264)",
+              new_contrast_ratio: 7.8, preview_hex_bg: "#F5F5F5", preview_hex_fg: "#4A4A4A"
+            }
+          ]
+        },
+        {
+          id: "pair-3", text: "Enlace de Navegación", background: "#E8E8E8", foreground: "#0066CC",
+          contrast_ratio: 3.2, wcag_aa: { normal_text: false, large_text: true },
+          wcag_aaa: { normal_text: false, large_text: false }, status: "fail",
+          suggestions: [
+            {
+              type: "darken_bg", background_oklch: "oklch(0.65 0.01 264)", foreground_oklch: "oklch(0.45 0.15 264)",
+              new_contrast_ratio: 5.2, preview_hex_bg: "#B0B0B0", preview_hex_fg: "#0066CC"
+            }
+          ]
         }
-        
-        # Replace the sampleData in the template with our demo data
-        html_content = html_content.replace(
-            'const sampleData = {',
-            f'const sampleData = {json.dumps(sample_data, indent=2)}; \n    const _ignored = {{'
-        )
-        
-        return HTMLResponse(content=html_content)
-    else:
-        # Fallback to basic widget if template not found
-        return HTMLResponse(content=WIDGET_HTML)
+      ]
+    };
+    function showTab(tabName) {
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('colors-content').style.display = tabName === 'colors' ? 'flex' : 'none';
+      document.getElementById('vision-content').style.display = tabName === 'vision' ? 'block' : 'none';
+    }
+    function getWCAGBadge(level, passes) {
+      return `<span class="wcag-badge ${passes ? 'pass' : 'fail'}">${level}: ${passes ? '✓' : '✗'}</span>`;
+    }
+    function renderColorPair(pair) {
+      const suggestionTypeLabels = { lighten_bg: 'Lighten Background', darken_bg: 'Darken Background', adjust_fg: 'Adjust Foreground' };
+      const suggestionsHTML = pair.suggestions.length > 0 ? `
+        <div class="suggestions-section">
+          <div class="suggestions-header">
+            <span class="fail-badge">Fail</span>
+            <h4>OKLCH Suggestions</h4>
+          </div>
+          <div class="suggestions-grid">
+            ${pair.suggestions.map(sugg => `
+              <div class="suggestion-card">
+                <div class="suggestion-preview" style="background: ${sugg.preview_hex_bg}; color: ${sugg.preview_hex_fg};">Aa</div>
+                <div class="suggestion-badge">✅ Fixed</div>
+                <div class="suggestion-type">${suggestionTypeLabels[sugg.type] || sugg.type}</div>
+                <div class="suggestion-color">${sugg.background_oklch}</div>
+                <div class="suggestion-color">${sugg.foreground_oklch}</div>
+                <div class="suggestion-ratio">Ratio: ${sugg.new_contrast_ratio}:1</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : '';
+      return `
+        <div class="color-pair-card">
+          <div class="pair-header">Original "${pair.text}"</div>
+          <div class="color-preview-section">
+            <div class="color-preview" style="background: ${pair.background}; color: ${pair.foreground};">Aa</div>
+            <div class="ratio-info">
+              <div class="ratio-badge ${pair.status === 'pass' ? '' : 'fail'}">${pair.status === 'pass' ? 'AAA' : 'Fail'}</div>
+              <div class="ratio-value">Ratio: ${pair.contrast_ratio}:1</div>
+            </div>
+          </div>
+          <div class="color-codes">
+            <div>
+              <div class="color-code-label">Background</div>
+              <div class="color-code">${pair.background}</div>
+            </div>
+            <div>
+              <div class="color-code-label">Foreground</div>
+              <div class="color-code">${pair.foreground}</div>
+            </div>
+          </div>
+          <div class="wcag-levels">
+            ${getWCAGBadge('AA Normal', pair.wcag_aa.normal_text)}
+            ${getWCAGBadge('AA Large', pair.wcag_aa.large_text)}
+            ${getWCAGBadge('AAA Normal', pair.wcag_aaa.normal_text)}
+            ${getWCAGBadge('AAA Large', pair.wcag_aaa.large_text)}
+          </div>
+          ${suggestionsHTML}
+        </div>
+      `;
+    }
+    function renderResults(data) {
+      document.getElementById('passing-count').textContent = data.summary.passing_pairs;
+      document.getElementById('failing-count').textContent = data.summary.failing_pairs;
+      document.getElementById('texts-count').textContent = data.summary.detected_texts;
+      document.getElementById('colors-content').innerHTML = data.color_pairs.map(pair => renderColorPair(pair)).join('');
+    }
+    renderResults(sampleData);
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
 
 # ============================================================================
 # MCP ENDPOINT (following gastos example pattern EXACTLY)
