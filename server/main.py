@@ -337,8 +337,106 @@ async def root():
 
 @app.get("/widget")
 async def widget():
-    """Serve the widget HTML for testing"""
-    return HTMLResponse(content=WIDGET_HTML)
+    """Serve the widget HTML with static demo data for preview"""
+    # Load the more complete template from web/ui-template.html
+    template_path = Path(__file__).parent.parent / "web" / "ui-template.html"
+    
+    if template_path.exists():
+        with open(template_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Create realistic sample data for demo
+        sample_data = {
+            "summary": {
+                "total_pairs": 4,
+                "passing_pairs": 2,
+                "failing_pairs": 2,
+                "detected_texts": 5
+            },
+            "color_pairs": [
+                {
+                    "id": "pair-0",
+                    "text": "Título Principal",
+                    "background": "#FFFFFF",
+                    "foreground": "#333333",
+                    "contrast_ratio": 12.63,
+                    "wcag_aa": {"normal_text": True, "large_text": True},
+                    "wcag_aaa": {"normal_text": True, "large_text": True},
+                    "status": "pass",
+                    "suggestions": []
+                },
+                {
+                    "id": "pair-1",
+                    "text": "Botón de Acción",
+                    "background": "#0066CC",
+                    "foreground": "#FFFFFF",
+                    "contrast_ratio": 7.12,
+                    "wcag_aa": {"normal_text": True, "large_text": True},
+                    "wcag_aaa": {"normal_text": True, "large_text": True},
+                    "status": "pass",
+                    "suggestions": []
+                },
+                {
+                    "id": "pair-2",
+                    "text": "Texto Secundario",
+                    "background": "#F5F5F5",
+                    "foreground": "#999999",
+                    "contrast_ratio": 2.85,
+                    "wcag_aa": {"normal_text": False, "large_text": False},
+                    "wcag_aaa": {"normal_text": False, "large_text": False},
+                    "status": "fail",
+                    "suggestions": [
+                        {
+                            "type": "darken_bg",
+                            "background_oklch": "oklch(0.75 0.01 264)",
+                            "foreground_oklch": "oklch(0.45 0.01 264)",
+                            "new_contrast_ratio": 4.6,
+                            "preview_hex_bg": "#D0D0D0",
+                            "preview_hex_fg": "#999999"
+                        },
+                        {
+                            "type": "adjust_fg",
+                            "background_oklch": "oklch(0.93 0.01 264)",
+                            "foreground_oklch": "oklch(0.35 0.01 264)",
+                            "new_contrast_ratio": 7.8,
+                            "preview_hex_bg": "#F5F5F5",
+                            "preview_hex_fg": "#4A4A4A"
+                        }
+                    ]
+                },
+                {
+                    "id": "pair-3",
+                    "text": "Enlace de Navegación",
+                    "background": "#E8E8E8",
+                    "foreground": "#0066CC",
+                    "contrast_ratio": 3.2,
+                    "wcag_aa": {"normal_text": False, "large_text": True},
+                    "wcag_aaa": {"normal_text": False, "large_text": False},
+                    "status": "fail",
+                    "suggestions": [
+                        {
+                            "type": "darken_bg",
+                            "background_oklch": "oklch(0.65 0.01 264)",
+                            "foreground_oklch": "oklch(0.45 0.15 264)",
+                            "new_contrast_ratio": 5.2,
+                            "preview_hex_bg": "#B0B0B0",
+                            "preview_hex_fg": "#0066CC"
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        # Replace the sampleData in the template with our demo data
+        html_content = html_content.replace(
+            'const sampleData = {',
+            f'const sampleData = {json.dumps(sample_data, indent=2)}; \n    const _ignored = {{'
+        )
+        
+        return HTMLResponse(content=html_content)
+    else:
+        # Fallback to basic widget if template not found
+        return HTMLResponse(content=WIDGET_HTML)
 
 # ============================================================================
 # MCP ENDPOINT (following gastos example pattern EXACTLY)
