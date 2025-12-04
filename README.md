@@ -197,7 +197,7 @@ El servidor estará disponible en `http://localhost:8000`
 3. Añade un nuevo conector MCP:
    ```
    Nombre: Color Accessibility
-   URL: https://app-color-accessibility.onrender.com/mcp
+   URL: https://color-accessibility-mcp-app.onrender.com/mcp
    ```
 4. Guarda y refresca
 
@@ -339,13 +339,13 @@ Analiza pares de colores y devuelve evaluación WCAG.
 ## 🌐 Demo
 
 **Servidor en Producción:**  
-🔗 https://app-color-accessibility.onrender.com
+🔗 https://color-accessibility-mcp-app.onrender.com/
 
 **Endpoint MCP:**  
-🔗 https://app-color-accessibility.onrender.com/mcp
+🔗 https://color-accessibility-mcp-app.onrender.com/mcp
 
 **Widget de Prueba:**  
-🔗 https://app-color-accessibility.onrender.com/widget
+🔗 https://color-accessibility-mcp-app.onrender.com/widget
 
 ---
 
